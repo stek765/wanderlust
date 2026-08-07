@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ricordi-nfc",
+  "main": "worker/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Il Worker serve anche il sito statico: un solo deploy, un solo dominio, zero CORS.
+  // "none" è voluto: se lasciassimo gestire il fallback agli asset, index.html
+  // risponderebbe anche a /api/*. Il fallback lo fa il Worker esplicitamente, in fondo
+  // alle rotte, dopo aver escluso API e media.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "none"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ricordi",
+      // DA FARE (Stefano): `npx wrangler d1 create ricordi` e incollare qui l'id
+      // restituito. In locale questo valore non viene usato: `wrangler dev` crea un
+      // SQLite finto sotto .wrangler/ e ignora l'id.
+      "database_id": "PLACEHOLDER-DA-SOSTITUIRE",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      // DA FARE (Stefano): `npx wrangler r2 bucket create ricordi-media`.
+      // In locale wrangler emula il bucket su disco, non serve crearlo per sviluppare.
+      "bucket_name": "ricordi-media"
+    }
+  ],
+
+  // Backup settimanale dell'indice: domenica alle 4:00 UTC.
+  "triggers": {
+    "crons": ["0 4 * * 0"]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}
