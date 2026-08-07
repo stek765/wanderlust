@@ -25,7 +25,7 @@ export default defineWorkspace([
         workers: {
           singleWorker: true,
           miniflare: {
-            compatibilityDate: '2025-01-01',
+            compatibilityDate: '2024-12-30',
             compatibilityFlags: ['nodejs_compat'],
             d1Databases: ['DB'],
             r2Buckets: ['MEDIA'],
