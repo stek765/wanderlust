@@ -46,7 +46,8 @@ describe('cifratura', () => {
   it('si accorge se il ciphertext è stato manomesso', async () => {
     const key = await generateKey();
     const encrypted = new Uint8Array(await (await encryptBlob(key, bytesOf('intatto'))).arrayBuffer());
-    encrypted[encrypted.length - 1] ^= 0xff;
+    const ultimo = encrypted.length - 1;
+    encrypted[ultimo] = (encrypted[ultimo] ?? 0) ^ 0xff;
 
     await expect(decryptBlob(key, encrypted.buffer as ArrayBuffer)).rejects.toThrow();
   });

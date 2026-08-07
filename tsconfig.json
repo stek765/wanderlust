@@ -1,10 +1,18 @@
+/*
+ * Configurazione del browser.
+ *
+ * I tipi di Cloudflare Workers NON vanno qui: ridefiniscono globali che esistono anche
+ * nel DOM (Request, Response, e perfino il significato di append su un elemento) e il
+ * risultato sono errori incomprensibili in file che non c'entrano niente. Il Worker ha
+ * la sua configurazione separata, tsconfig.worker.json.
+ */
 {
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "types": ["@cloudflare/workers-types", "vite/client"],
+    "types": ["vite/client"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
@@ -14,5 +22,5 @@
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "worker", "tests", "*.config.ts"]
+  "include": ["src", "shared", "tests/lib"]
 }

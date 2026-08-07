@@ -1,0 +1,21 @@
+/*
+ * Configurazione del Worker. Niente DOM: là dentro non esiste, e includerlo
+ * permetterebbe di scrivere codice che compila e poi esplode in produzione.
+ */
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["worker", "shared", "tests/worker"]
+}

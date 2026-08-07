@@ -69,10 +69,15 @@ export function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export function base64UrlDecode(encoded: string): Uint8Array {
+/*
+ * Il tipo di ritorno è esplicito perché WebCrypto accetta solo viste su ArrayBuffer
+ * veri: un Uint8Array generico potrebbe poggiare su SharedArrayBuffer, e TypeScript
+ * giustamente rifiuta di passarlo a importKey.
+ */
+export function base64UrlDecode(encoded: string): Uint8Array<ArrayBuffer> {
   const padded = encoded.replace(/-/g, '+').replace(/_/g, '/');
   const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
+  const bytes = new Uint8Array(new ArrayBuffer(binary.length));
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }

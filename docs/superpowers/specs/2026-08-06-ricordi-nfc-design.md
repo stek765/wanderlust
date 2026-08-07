@@ -44,10 +44,13 @@ Tutto su Cloudflare, quattro pezzi.
 
 | Pezzo | Ruolo | Piano gratuito |
 |---|---|---|
-| **Pages** | serve il sito statico (HTML/JS/CSS) su CDN, HTTPS automatico | illimitato |
-| **Worker** | l'API: legge e scrive i metadati, firma i permessi di upload | 100k richieste/giorno |
+| **Worker** | l'API, i media, **e il sito statico** | 100k richieste/giorno |
 | **D1** | database SQLite: l'indice di posti e foto | 5 GB |
 | **R2** | storage: i file delle foto cifrate | 10 GB, egress gratuito |
+
+**Un solo Worker serve anche il sito** (funzione "static assets" di Cloudflare), invece di
+Pages e Worker separati: un deploy, un dominio, e **zero CORS** — una classe intera di
+problemi che non si presenta mai.
 
 R2 è stato scelto al posto di S3 per l'egress gratuito: un sito di foto è quasi tutto
 traffico in uscita, e su AWS quello si paga a GB.
@@ -59,12 +62,13 @@ Il codice non deve mai usare API proprietarie Cloudflare oltre a queste due inte
 
 ### Flusso di lettura
 
-1. Il tag NFC contiene `https://<dominio>/p/<slug>#<chiave>`. Safari apre la pagina.
-2. Pages serve il guscio HTML+JS.
+1. Il tag NFC contiene `https://<dominio>/p/<slug>?w=<token>#<chiave>`. Safari apre la pagina.
+2. Il Worker serve il guscio HTML+JS.
 3. Il JS chiede al Worker i metadati dello slug. Il Worker interroga D1 e risponde con
    nome, coordinate, ed elenco delle foto con i rispettivi percorsi su R2.
-4. Il browser scarica le miniature cifrate direttamente da R2, senza ripassare dal
-   Worker, e le decifra localmente con la chiave presa dal frammento dell'URL.
+4. Il browser scarica le miniature cifrate e le decifra localmente con la chiave presa dal
+   frammento dell'URL. Le risposte sono marcate `immutable`, quindi la CDN di Cloudflare
+   le serve dalla cache: il Worker viene toccato una volta sola per file.
 5. Intanto la mappa vola sul punto. Quando il volo finisce, le miniature sono pronte.
 
 ### Flusso di scrittura
@@ -73,12 +77,16 @@ Il codice non deve mai usare API proprietarie Cloudflare oltre a queste due inte
 2. Selezione multipla dalla galleria del telefono.
 3. Il browser, per ogni foto: legge la data da EXIF, ridimensiona, genera una miniatura
    da 300px, cifra sia la miniatura sia la versione grande.
-4. Il browser chiede al Worker dei permessi di upload temporanei (URL firmati R2). Il
-   Worker li rilascia solo dopo aver validato il token di scrittura.
-5. Il browser carica i blob cifrati **direttamente su R2**, 4 alla volta. I file non
-   passano mai dal Worker: nessun limite di dimensione, nessun collo di bottiglia.
-6. A caricamento completato, il browser dice al Worker di registrare le foto. Il Worker
+4. Il browser carica i blob cifrati al Worker, 4 foto alla volta; il Worker verifica il
+   token di scrittura e li deposita su R2.
+5. A caricamento completato, il browser dice al Worker di registrare le foto. Il Worker
    scrive le righe in D1.
+
+I file passano dal Worker invece di andare direttamente su R2 con URL firmati. L'upload
+diretto serviva a evitare colli di bottiglia sui file grandi, ma i video sono fuori
+perimetro e una foto compressa pesa 400 KB: a quelle dimensioni il Worker non è un collo
+di bottiglia, e farne a meno elimina credenziali S3, firma degli URL e configurazione
+CORS del bucket. Il limite per blob è 15 MB, ben oltre qualsiasi foto compressa.
 
 ## Cifratura
 

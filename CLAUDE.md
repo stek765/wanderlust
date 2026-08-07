@@ -8,31 +8,50 @@ posto.
 Niente account, niente pagamenti, niente multi-tenant. È deliberatamente separato da
 `Startup_NFC`, che è il business: qui non si portano dentro requisiti da prodotto.
 
-## Stato al 06/08/2026
+## Stato al 07/08/2026
 
-Design approvato e committato:
-`docs/superpowers/specs/2026-08-06-ricordi-nfc-design.md` — **leggerlo per primo**, è la
-fonte di verità. Questo file contiene solo il contesto che dal documento non si deduce.
+**Funziona end-to-end in locale.** Design in
+`docs/superpowers/specs/2026-08-06-ricordi-nfc-design.md`, istruzioni operative in
+`README.md`.
 
-**Prossimo passo:** scrivere il piano di implementazione in
-`docs/superpowers/plans/2026-08-06-ricordi-nfc.md` con la skill `superpowers:writing-plans`.
-Niente codice è ancora stato scritto.
+83 test verdi: 48 sulle librerie, 28 sul Worker dentro workerd vero con D1 e R2 emulati,
+7 end-to-end su WebKit — che è il motore di Safari, quindi il browser che conta davvero.
+Il test end-to-end carica una foto vera: canvas che ridimensiona, WebCrypto che cifra,
+blob che parte, torna e viene decifrato.
 
-## Due raffinamenti proposti ma NON ancora approvati
+I due raffinamenti (Worker unico, foto attraverso il Worker) sono stati applicati e la
+spec è stata aggiornata di conseguenza.
 
-Sono emersi scendendo nel dettaglio del piano, dopo l'approvazione della spec. Vanno
-confermati con Stefano prima di scrivere il piano, e se approvati va aggiornata la spec.
+### Cosa manca, e perché
 
-**1. Sito e API in un unico Worker**, con la funzione "static assets" di Cloudflare,
-invece di Pages + Worker separati. Un solo deploy, un solo dominio, e soprattutto zero
-CORS. La spec dice ancora Pages + Worker.
+**Le risorse Cloudflare e il deploy** — servono le credenziali di Stefano. Procedura
+completa nel README: `wrangler d1 create`, `wrangler r2 bucket create`, generazione del
+token master, `wrangler secret put`. Finché non è fatto, `wrangler.jsonc` ha
+`PLACEHOLDER-DA-SOSTITUIRE` come `database_id` (in locale è ignorato).
 
-**2. Le foto passano dal Worker** invece di andare direttamente su R2 con URL firmati.
-La spec voleva l'upload diretto per evitare colli di bottiglia, ma quel ragionamento
-valeva per i video, che sono fuori perimetro: le foto compresse pesano 400 KB. Passare
-dal Worker elimina credenziali S3, firma degli URL e configurazione CORS del bucket. In
-lettura il Worker marca le risposte `immutable`, quindi la CDN le serve dalla cache e il
-Worker viene toccato una volta per file. Privacy e costi restano identici.
+**La prova su un iPhone vero** — il tocco del tag NFC e Safari su iOS non si simulano in
+modo attendibile. Va provato a mano prima di considerare il progetto finito.
+
+**Il volo sul globo non è mai stato visto girare.** WebKit headless non ha WebGL, quindi
+nei test la mappa non parte e la pagina ripiega sulle sole foto (comportamento voluto,
+vedi sotto). L'animazione va guardata su un dispositivo vero.
+
+### Cose imparate costruendo, che nel design non c'erano
+
+**Senza WebGL la mappa non emette mai `load`, e la pagina restava bianca per sempre.**
+Trovato dai test end-to-end. Ora `MapScene.create()` restituisce null se il browser non
+regge, `ready()` ha un tetto di 5 secondi, e le foto compaiono comunque. Regola generale
+che ne discende: la mappa è la messa in scena, le foto sono il contenuto, e il contenuto
+non deve mai dipendere dalla messa in scena.
+
+**I tipi Workers e quelli del DOM non convivono.** `@cloudflare/workers-types` ridefinisce
+globali che esistono anche nel browser — al punto che `element.append()` smetteva di
+compilare. Da qui i due tsconfig separati: `tsconfig.json` per il browser,
+`tsconfig.worker.json` per il Worker. Non riunirli.
+
+**MapLibre pesa 285 KB gzippati**, più di tutto il resto messo insieme. Su 4G lento
+compete con i 2,5 secondi di volo che dovrebbero coprire la decifratura. Se il primo
+tocco risultasse lento su un telefono vero, è il primo posto dove guardare.
 
 ## Decisioni prese — non ridiscutere
 
