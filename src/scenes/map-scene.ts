@@ -89,10 +89,14 @@ export class MapScene {
       zoom: START_ZOOM,
       bearing: START_BEARING,
       pitch: 0,
-      attributionControl: { compact: true },
+      // Spostata in alto a destra più sotto: in basso finirebbe sopra l'invito a
+      // scorrere. Toglierla non è un'opzione, la licenza di CARTO e OSM la richiede.
+      attributionControl: false,
       // La scena si guarda, non si esplora: ogni gesto qui ruberebbe attenzione alle foto.
       interactive: false,
     });
+
+    this.map.addControl(new maplibregl.AttributionControl({ compact: true }), 'top-right');
   }
 
   /**

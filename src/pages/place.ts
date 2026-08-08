@@ -6,13 +6,18 @@
  *   1. si chiedono i metadati del posto (leggeri, nessuna immagine)
  *   2. parte il volo sul globo
  *   3. mentre la camera scende, le miniature vengono scaricate e decifrate
- *   4. il volo finisce, il pin si apre, la copertina è già pronta
+ *   4. il volo finisce, il pin si apre, il titolo compare sulla mappa
  *
  * Il punto 3 è il motivo per cui il punto 2 esiste. Non invertirli.
+ *
+ * All'arrivo NON si mostra nessuna foto: la mappa resta padrona dello schermo e le foto
+ * cominciano sotto, scorrendo. È una scelta, non una mancanza — una copertina scelta a
+ * caso fra le foto è arbitraria, e schiaccia la mappa nel momento in cui è appena
+ * arrivata a destinazione.
  */
 
 import type { PhotoDto, PlaceDto } from '../../shared/api-types';
-import { deletePhoto, fetchPlace, setCover } from '../lib/api-client';
+import { deletePhoto, fetchPlace } from '../lib/api-client';
 import { importKey } from '../lib/crypto';
 import { PhotoStore } from '../lib/photo-store';
 import { buildShareUrl, cleanedUrl, resolveWriteToken, type PlaceRoute } from '../lib/session';
@@ -65,11 +70,9 @@ export async function renderPlacePage(root: HTMLElement, route: PlaceRoute): Pro
   await scene?.ready();
 
   // Volo e decifratura partono insieme: è l'intero trucco della pagina.
-  const cover = coverOf(place);
-  const preloadKeys = [
-    ...(cover ? [cover.thumbKey, cover.key] : []),
-    ...place.photos.slice(0, PRELOAD_COUNT).map((p) => p.thumbKey),
-  ];
+  // Solo miniature: all'arrivo non si vede nessuna foto grande, quindi scaricarne una
+  // sarebbe lavoro speso per niente proprio nel momento in cui il tempo conta.
+  const preloadKeys = place.photos.slice(0, PRELOAD_COUNT).map((p) => p.thumbKey);
 
   await Promise.all([scene?.flyToPlace(), store.preload(preloadKeys)]);
 
@@ -93,57 +96,41 @@ async function renderContent(options: ContentOptions): Promise<void> {
   content.replaceChildren();
   content.classList.add('content--revealed');
 
-  const hero = await buildHero(place, photos, store);
+  // La scena d'arrivo: alta quanto lo schermo e trasparente, così la mappa resta
+  // visibile sotto finché non si scorre. Il titolo ci sta sopra, non al posto suo.
+  const stage = document.createElement('section');
+  stage.className = 'stage';
+
   const header = buildHeader(place, photos, options.slug, options.keyMaterial);
-  content.append(hero, header);
+  stage.append(buildScrim(), header, buildScrollCue(photos.length));
+  content.append(stage);
 
   const galleryHost = document.createElement('section');
   galleryHost.className = 'gallery';
   content.append(galleryHost);
 
   const viewer = new Viewer(photos, store, writeToken ? {
-    onSetCover: async (photo) => {
-      await setCover(options.slug, writeToken, photo.id);
-    },
     onDelete: async (photo) => {
       await deletePhoto(options.slug, writeToken, photo.id);
       photos = photos.filter((p) => p.id !== photo.id);
       redrawGallery();
-      refreshHeaderAndHero();
+      refreshHeader();
     },
   } : {});
 
   /**
-   * Riallinea intestazione e copertina all'elenco corrente.
+   * Riallinea il titolo all'elenco corrente.
    *
-   * Serve perché caricare o cancellare foto cambia tre cose insieme — la griglia, il
-   * conteggio e la copertina — e aggiornarne solo una lascia sullo schermo la
-   * contraddizione più fastidiosa possibile: "0 foto" scritto sopra tre foto.
+   * Serve perché caricare o cancellare foto cambia due cose insieme — la griglia e il
+   * conteggio — e aggiornarne solo una lascia sullo schermo la contraddizione più
+   * fastidiosa possibile: "0 foto" scritto sopra tre foto.
    */
-  const refreshHeaderAndHero = () => {
+  const refreshHeader = () => {
     const meta = header.querySelector('.place-header__meta');
     if (meta) meta.textContent = describeSpan(photos);
 
-    const cover = coverOf({ ...place, photos });
-    if (!cover) {
-      hero.replaceChildren();
-      hero.classList.add('hero--empty');
-      return;
-    }
-
-    void store.url(cover.key).then((url) => {
-      const existing = hero.querySelector('img');
-      if (existing) {
-        existing.src = url;
-        return;
-      }
-      const image = document.createElement('img');
-      image.src = url;
-      image.alt = '';
-      image.className = 'hero__image';
-      hero.replaceChildren(image);
-      hero.classList.remove('hero--empty');
-    });
+    const cue = stage.querySelector('.cue__label');
+    if (cue) cue.textContent = cueLabel(photos.length);
   };
 
   let gallery: Gallery | null = null;
@@ -173,7 +160,7 @@ async function renderContent(options: ContentOptions): Promise<void> {
       onFinished: (added) => {
         photos = [...photos, ...added].sort((a, b) => a.sortIndex - b.sortIndex);
         redrawGallery();
-        refreshHeaderAndHero();
+        refreshHeader();
       },
     });
   }
@@ -181,26 +168,45 @@ async function renderContent(options: ContentOptions): Promise<void> {
   window.addEventListener('pagehide', () => store.revokeAll(), { once: true });
 }
 
-async function buildHero(place: PlaceDto, photos: PhotoDto[], store: PhotoStore): Promise<HTMLElement> {
-  const hero = document.createElement('section');
-  hero.className = 'hero';
+/**
+ * La sfumatura fra la mappa e il titolo.
+ *
+ * Senza, il testo bianco finirebbe sopra una mappa che in certi punti è chiara (il mare
+ * di CARTO è grigio) e in certi punti nera, quindi a volte leggibile e a volte no. La
+ * sfumatura rende il fondo prevedibile senza nascondere la mappa.
+ */
+function buildScrim(): HTMLElement {
+  const scrim = document.createElement('div');
+  scrim.className = 'stage__scrim';
+  return scrim;
+}
 
-  const cover = coverOf({ ...place, photos });
-  if (cover) {
-    try {
-      const image = document.createElement('img');
-      image.src = await store.url(cover.key);
-      image.alt = '';
-      image.className = 'hero__image';
-      hero.append(image);
-    } catch {
-      hero.classList.add('hero--empty');
-    }
-  } else {
-    hero.classList.add('hero--empty');
-  }
+/** L'invito a scorrere. È l'unica indicazione d'uso del sito, quindi deve essere ovvia. */
+function buildScrollCue(count: number): HTMLElement {
+  const cue = document.createElement('div');
+  cue.className = 'cue';
 
-  return hero;
+  const label = document.createElement('span');
+  label.className = 'cue__label';
+  label.textContent = cueLabel(count);
+
+  const arrow = document.createElement('span');
+  arrow.className = 'cue__arrow';
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.textContent = '⌄';
+
+  cue.append(label, arrow);
+
+  // Sparisce al primo movimento: ha fatto il suo lavoro e non deve restare fra i piedi.
+  const hide = () => cue.classList.add('cue--gone');
+  window.addEventListener('scroll', hide, { once: true, passive: true });
+
+  return cue;
+}
+
+function cueLabel(count: number): string {
+  if (count === 0) return 'Nessun ricordo qui, per ora';
+  return count === 1 ? 'Scorri per il ricordo' : `Scorri per i ${count} ricordi`;
 }
 
 function buildHeader(place: PlaceDto, photos: PhotoDto[], slug: string, keyMaterial: string): HTMLElement {
@@ -254,10 +260,6 @@ function describeSpan(photos: PhotoDto[]): string {
   const last = format(Math.max(...dates));
 
   return first === last ? `${first} · ${count}` : `${first} – ${last} · ${count}`;
-}
-
-function coverOf(place: PlaceDto): PhotoDto | undefined {
-  return place.photos.find((p) => p.id === place.coverPhotoId) ?? place.photos[0];
 }
 
 function emptyState(canUpload: boolean): HTMLElement {

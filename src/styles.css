@@ -50,6 +50,13 @@ button {
   z-index: 0;
 }
 
+/* L'attribuzione sta in alto e sottotono: obbligatoria per licenza, ma non è
+   contenuto — non deve competere col nome del posto. */
+.maplibregl-ctrl-top-right {
+  top: calc(env(safe-area-inset-top) + 8px);
+  opacity: 0.45;
+}
+
 /*
  * Magenta e non blu: su una mappa quasi nera il blu si confonde con l'acqua, il magenta
  * no. È anche il colore del pin nel video di riferimento, per lo stesso motivo.
@@ -77,85 +84,171 @@ button {
   z-index: 1;
   /* Prima dell'atterraggio il contenuto non esiste ancora: si vede solo il globo. */
   opacity: 0;
-  transform: translateY(28px) scale(0.97);
 }
 
 /*
- * L'apertura del pin. Parte dal basso e si assesta, come se la copertina fosse stata
- * tirata su dal punto sulla mappa.
+ * Solo una dissolvenza: il movimento vero lo fanno gli elementi del titolo, uno dopo
+ * l'altro. Muovere anche il contenitore li farebbe scivolare due volte.
  */
 .content--revealed {
-  animation: apri 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: comparsa 500ms ease forwards;
 }
 
-@keyframes apri {
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+@keyframes comparsa {
+  to { opacity: 1; }
 }
 
-/* Chi ha chiesto meno movimento al sistema riceve la stessa pagina, senza il tuffo. */
+/* Chi ha chiesto meno movimento al sistema riceve la stessa pagina, ferma. */
 @media (prefers-reduced-motion: reduce) {
-  .content--revealed {
+  .content--revealed,
+  .place-header h1,
+  .place-header h1::after,
+  .place-header__meta,
+  .share,
+  .cue {
     animation-duration: 1ms;
+    animation-delay: 0ms;
   }
-  .pin {
+  .pin,
+  .cue__arrow {
     animation: none;
   }
 }
 
-.hero {
-  height: 68vh;
-  margin-top: 32vh;
-  overflow: hidden;
-  border-radius: var(--raggio) var(--raggio) 0 0;
-  background: #0e141b;
+/* --- La scena d'arrivo ----------------------------------------------------- */
+
+/*
+ * Alta quanto lo schermo e trasparente: la mappa appena raggiunta resta padrona di
+ * tutto il primo schermo, e le foto cominciano sotto. Nessuna copertina, nessuna foto
+ * scelta a caso — l'arrivo è uguale per tutti i posti.
+ */
+.stage {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 20px calc(env(safe-area-inset-bottom) + 26px);
 }
 
-.hero__image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-/* Senza copertina non c'è niente da incorniciare: il riquadro sparisce invece di
-   restare come un buco scuro sopra il nome. */
-.hero--empty {
-  height: 0;
+/* Rende leggibile il testo bianco senza coprire la mappa: trasparente in alto, pieno
+   dove comincia la griglia, così lo stacco fra scena e foto non si vede. */
+.stage__scrim {
+  position: absolute;
+  inset: auto 0 0;
+  height: 62%;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgb(11 15 20 / 0%) 0%,
+    rgb(11 15 20 / 55%) 45%,
+    rgb(11 15 20 / 92%) 80%,
+    var(--sfondo) 100%
+  );
 }
 
 .place-header {
-  padding: 20px 18px 8px;
-  background: var(--sfondo);
+  position: relative;
+  padding: 0 0 22px;
 }
 
 .place-header h1 {
   margin: 0;
-  font-size: 30px;
-  letter-spacing: -0.02em;
+  font-size: clamp(42px, 13vw, 76px);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+  text-shadow: 0 2px 30px rgb(0 0 0 / 60%);
+  /* Sale da sotto la propria riga di base, come una scritta che emerge. */
+  animation: sali 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* La riga che si disegna sotto il nome: il dettaglio che fa sembrare l'arrivo
+   una scena e non una schermata. */
+.place-header h1::after {
+  content: '';
+  display: block;
+  height: 2px;
+  margin-top: 14px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--pin), rgb(255 61 143 / 0%));
+  transform-origin: left;
+  animation: traccia 1100ms cubic-bezier(0.16, 1, 0.3, 1) 260ms both;
 }
 
 .place-header__meta {
-  margin: 6px 0 14px;
+  margin: 14px 0 18px;
   color: var(--tenue);
   font-size: 14px;
+  letter-spacing: 0.02em;
+  animation: sali 700ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both;
 }
 
 .share {
-  padding: 9px 16px;
-  border: 1px solid var(--bordo);
+  padding: 10px 18px;
+  border: 1px solid rgb(255 255 255 / 22%);
   border-radius: 999px;
-  background: transparent;
+  background: rgb(255 255 255 / 6%);
   color: var(--testo);
+  backdrop-filter: blur(10px);
+  animation: sali 700ms cubic-bezier(0.16, 1, 0.3, 1) 560ms both;
+}
+
+@keyframes sali {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes traccia {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* --- Invito a scorrere ----------------------------------------------------- */
+
+.cue {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--tenue);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: sali 700ms ease 900ms both;
+  transition: opacity 400ms ease;
+}
+
+/*
+ * `animation: none` non è di troppo: l'animazione di entrata usa fill-mode `both`, che
+ * inchioda opacity a 1 anche dopo la fine e vince su qualsiasi regola dichiarata qui.
+ * Senza toglierla, l'invito resta sullo schermo per sempre.
+ */
+.cue--gone {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cue__arrow {
+  font-size: 20px;
+  line-height: 1;
+  animation: rimbalza 1.8s ease-in-out infinite;
+}
+
+@keyframes rimbalza {
+  0%, 100% { transform: translateY(0); opacity: 0.5; }
+  50%      { transform: translateY(6px); opacity: 1; }
 }
 
 /* --- Griglia --------------------------------------------------------------- */
 
+/* Fondo pieno: da qui in giù la mappa non deve più trasparire dietro le foto. */
 .gallery {
+  position: relative;
   background: var(--sfondo);
-  padding: 10px 8px 24px;
+  padding: 4px 8px 24px;
 }
 
 .grid {
@@ -171,8 +264,10 @@ button {
   overflow: hidden;
   border-radius: 6px;
   background: #131a22;
-  /* aspect-ratio arriva da JS con le proporzioni vere: senza, la griglia ballerebbe
-     mentre le miniature arrivano. */
+  /* Quadrati: la griglia resta compatta con foto verticali e orizzontali mescolate, e
+     l'altezza è nota prima che le miniature arrivino, quindi la pagina non balla
+     sotto il dito mentre si scorre. */
+  aspect-ratio: 1;
 }
 
 .tile img {

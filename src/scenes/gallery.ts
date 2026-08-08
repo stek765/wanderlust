@@ -37,10 +37,10 @@ export class Gallery {
       tile.type = 'button';
       tile.setAttribute('aria-label', `Foto ${index + 1} di ${this.options.photos.length}`);
 
-      // Le proporzioni vere fin da subito: senza, ogni miniatura che arriva sposta
-      // quelle sotto e la pagina balla sotto il dito mentre si scorre.
-      tile.style.aspectRatio = `${photo.width} / ${photo.height}`;
-
+      // I riquadri sono quadrati (lo impone il CSS) e non seguono le proporzioni della
+      // foto: con verticali e orizzontali mescolate le righe si spezzano e restano
+      // buchi. Ritagliare in anteprima non toglie niente — la foto intera si vede
+      // toccandola.
       tile.addEventListener('click', () => this.options.onOpen(index));
 
       this.tiles.set(tile, photo);

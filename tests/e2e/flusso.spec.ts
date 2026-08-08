@@ -86,7 +86,40 @@ test('carica una foto e la ritrova nella griglia', async ({ page }) => {
   // Regressione: la griglia si aggiornava e l'intestazione no, lasciando "0 foto"
   // scritto sopra le foto appena caricate.
   await expect(page.locator('.place-header__meta')).toContainText('1 foto');
-  await expect(page.locator('.hero__image')).toBeVisible();
+  await expect(page.locator('.cue__label')).toHaveText('Scorri per il ricordo');
+});
+
+test('all\'arrivo si vede la mappa, non una foto', async ({ page }) => {
+  const tagUrl = await creaPosto(page, 'Bangkok');
+  await page.goto(percorso(tagUrl));
+
+  await page.locator('input[type="file"]').waitFor({ state: 'attached', timeout: 15_000 });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'ricordo.png',
+    mimeType: 'image/png',
+    buffer: PNG_4x4,
+  });
+  await expect(page.locator('.uploader__status')).toContainText('1 foto aggiunte', { timeout: 20_000 });
+
+  await page.reload();
+  await expect(page.locator('.place-header h1')).toHaveText('Bangkok', { timeout: 20_000 });
+
+  // La scena d'arrivo occupa tutto il primo schermo e non contiene immagini: le foto
+  // cominciano sotto la piega, e ci si arriva scorrendo.
+  const stage = page.locator('.stage');
+  const viewport = page.viewportSize()!;
+  const box = (await stage.boundingBox())!;
+
+  expect(box.height).toBeGreaterThanOrEqual(viewport.height - 2);
+  await expect(stage.locator('img')).toHaveCount(0);
+  await expect(page.locator('.grid').first()).not.toBeInViewport();
+
+  // L'invito a scorrere se ne va appena si scorre. Regressione: l'animazione di
+  // entrata usa fill-mode `both`, che teneva opacity a 1 e lo lasciava lì per sempre.
+  await expect(page.locator('.cue')).toBeVisible();
+  // La rotellina non esiste su WebKit mobile: si scorre come farebbe la pagina.
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await expect(page.locator('.cue')).toHaveCSS('opacity', '0');
 });
 
 test('il visore resta chiuso finché non si tocca una foto', async ({ page }) => {
