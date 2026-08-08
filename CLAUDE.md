@@ -8,16 +8,17 @@ posto.
 Niente account, niente pagamenti, niente multi-tenant. È deliberatamente separato da
 `Startup_NFC`, che è il business: qui non si portano dentro requisiti da prodotto.
 
-## Stato al 07/08/2026
+## Stato all'08/08/2026
 
 **Funziona end-to-end in locale.** Design in
 `docs/superpowers/specs/2026-08-06-ricordi-nfc-design.md`, istruzioni operative in
 `README.md`.
 
-83 test verdi: 48 sulle librerie, 28 sul Worker dentro workerd vero con D1 e R2 emulati,
-7 end-to-end su WebKit — che è il motore di Safari, quindi il browser che conta davvero.
-Il test end-to-end carica una foto vera: canvas che ridimensiona, WebCrypto che cifra,
-blob che parte, torna e viene decifrato.
+92 test verdi: 53 sulle librerie, 28 sul Worker dentro workerd vero con D1 e R2 emulati,
+11 end-to-end. Questi ultimi girano su WebKit — il motore di Safari, quindi il browser che
+conta — più un caso su Chrome, per il motivo spiegato sotto a proposito dell'HEIC.
+I test end-to-end caricano foto vere: canvas che ridimensiona, WebCrypto che cifra, blob
+che parte, torna e viene decifrato.
 
 I due raffinamenti (Worker unico, foto attraverso il Worker) sono stati applicati e la
 spec è stata aggiornata di conseguenza.
@@ -32,9 +33,10 @@ token master, `wrangler secret put`. Finché non è fatto, `wrangler.jsonc` ha
 **La prova su un iPhone vero** — il tocco del tag NFC e Safari su iOS non si simulano in
 modo attendibile. Va provato a mano prima di considerare il progetto finito.
 
-**Il volo sul globo non è mai stato visto girare.** WebKit headless non ha WebGL, quindi
-nei test la mappa non parte e la pagina ripiega sulle sole foto (comportamento voluto,
-vedi sotto). L'animazione va guardata su un dispositivo vero.
+**Il volo è stato visto girare solo in Chromium con WebGL software** (swiftshader), che
+serve a verificare che avvenga ma non dice niente sulla fluidità. Su WebKit headless non
+c'è WebGL: lì la mappa non parte e la pagina ripiega sulle sole foto, che è il
+comportamento voluto (vedi sotto).
 
 ### Cose imparate costruendo, che nel design non c'erano
 
@@ -58,7 +60,7 @@ non deve stare nel caricamento iniziale); e il test `[HEIC]` gira su Chrome oltr
 Safari, perché su WebKit passerebbe anche col convertitore rotto.
 
 **MapLibre pesa 285 KB gzippati**, più di tutto il resto messo insieme. Su 4G lento
-compete con i 2,5 secondi di volo che dovrebbero coprire la decifratura. Se il primo
+compete con i secondi di volo che dovrebbero coprire la decifratura. Se il primo
 tocco risultasse lento su un telefono vero, è il primo posto dove guardare.
 
 ## Decisioni prese — non ridiscutere
@@ -93,15 +95,29 @@ Uno script CLI era più semplice da costruire ed è stato scartato per questo. *
 motivo per cui esiste il database**: l'elenco delle foto deve poter cambiare dal telefono
 senza ricompilare il sito.
 
-**MapLibre GL JS + OpenFreeMap.** Globo 3D e `flyTo` nativi, mappe gratuite senza chiave
-API e senza limiti. Mapbox scartato: marginalmente più bello ma richiede token e ha un
-tetto gratuito.
+**MapLibre GL JS + CARTO Dark Matter.** Globo 3D e `flyTo` nativi; stile scuro e senza
+strade, gratuito e senza chiave API. Lo stile chiaro di OpenFreeMap (Liberty) è stato
+scartato: una mappa colorata combatte con le foto. Mapbox scartato: richiede token e ha
+un tetto gratuito. Le alternative già pronte sono elencate in cima a `map-scene.ts`.
 
-**I 2,5 secondi di volo sulla mappa sono il budget di caricamento.** Con la cifratura le
-miniature vanno scaricate e decifrate prima di comparire. Il volo dura esattamente quanto
+**I 3,8 secondi di volo sulla mappa sono il budget di caricamento.** Con la cifratura le
+miniature vanno scaricate e decifrate prima di comparire. Il volo dura almeno quanto
 serve a farlo in sottofondo. Non è decorazione: è il modo in cui il costo della cifratura
 viene nascosto dietro qualcosa di bello invece che dietro uno spinner. Chi tocca questa
 parte deve saperlo.
+
+**All'arrivo non si mostra nessuna foto.** La mappa resta padrona del primo schermo, col
+titolo animato sopra, e le foto cominciano sotto la piega. Una copertina scelta
+automaticamente fra le foto è arbitraria con qualsiasi criterio, e schiaccia la mappa
+proprio nel momento in cui è appena arrivata. Da qui: `cover_photo_id` e la rotta
+`PATCH /cover` esistono ancora nel Worker e sono testate, ma **nessuna interfaccia le
+usa** — se restano inutilizzate a lungo, vanno tolte.
+
+**Attenzione al CSS che vince sulle classi che nascondono.** È successo due volte: un
+`display: grid` che batteva l'attributo `hidden` (visore sempre aperto, pagina che
+sembrava non caricare) e un `animation-fill-mode: both` che inchiodava `opacity: 1` e
+teneva in vita l'invito a scorrere. Entrambi hanno un test di regressione. Se qualcosa
+"non si nasconde", il sospetto numero uno è questo.
 
 ## Fuori perimetro
 
