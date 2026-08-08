@@ -14,8 +14,20 @@ import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
 /** Durata del volo. È anche il budget entro cui le miniature devono essere pronte. */
 export const FLIGHT_MS = 2500;
 
-/** Mappe gratuite, senza chiave API e senza limiti di utilizzo. */
-const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+/**
+ * Lo stile della mappa. Tutti gratuiti e senza chiave API.
+ *
+ * "Dark Matter" di CARTO: terre quasi nere, acqua grigio scuro, niente strade, solo le
+ * etichette delle città. È lo stesso registro del video di riferimento, ed è l'unico che
+ * non combatte con le foto — una mappa colorata sotto una copertina a schermo intero fa
+ * a botte con lei.
+ *
+ * Alternative già pronte, basta sostituire la costante:
+ *   https://basemaps.cartocdn.com/gl/positron-gl-style/style.json      chiaro e minimale
+ *   https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json       colorato ma sobrio
+ *   https://tiles.openfreemap.org/styles/liberty                       OSM classico
+ */
+const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 const START_ZOOM = 1.2;
 const ARRIVAL_ZOOM = 12.5;

@@ -11,6 +11,7 @@
   --tenue: #8d9aa6;
   --bordo: #1e2833;
   --accento: #4aa3ff;
+  --pin: #ff3d8f;
   --pericolo: #ff6b6b;
   --raggio: 12px;
   color-scheme: dark;
@@ -49,19 +50,24 @@ button {
   z-index: 0;
 }
 
+/*
+ * Magenta e non blu: su una mappa quasi nera il blu si confonde con l'acqua, il magenta
+ * no. È anche il colore del pin nel video di riferimento, per lo stesso motivo.
+ */
 .pin {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--accento);
-  box-shadow: 0 0 0 4px rgb(74 163 255 / 30%);
+  background: var(--pin);
+  border: 2px solid #fff;
+  box-shadow: 0 0 12px rgb(255 61 143 / 60%);
   animation: pulsa 2s ease-out infinite;
 }
 
 @keyframes pulsa {
-  0% { box-shadow: 0 0 0 0 rgb(74 163 255 / 60%); }
-  70% { box-shadow: 0 0 0 22px rgb(74 163 255 / 0%); }
-  100% { box-shadow: 0 0 0 0 rgb(74 163 255 / 0%); }
+  0% { box-shadow: 0 0 12px rgb(255 61 143 / 60%), 0 0 0 0 rgb(255 61 143 / 55%); }
+  70% { box-shadow: 0 0 12px rgb(255 61 143 / 60%), 0 0 0 24px rgb(255 61 143 / 0%); }
+  100% { box-shadow: 0 0 12px rgb(255 61 143 / 60%), 0 0 0 0 rgb(255 61 143 / 0%); }
 }
 
 /* --- Il contenuto che si apre dal pin -------------------------------------- */
@@ -204,6 +210,15 @@ button {
   background: #000;
   display: grid;
   grid-template-rows: auto 1fr auto auto;
+}
+
+/*
+ * Necessario, non ridondante: l'attributo `hidden` nasconde impostando display:none,
+ * ma è una regola del browser e qualunque display dichiarato qui sopra la batte. Senza
+ * questa riga il visore resta aperto e nero sopra tutta la pagina, sempre.
+ */
+.viewer[hidden] {
+  display: none;
 }
 
 .viewer__bar {

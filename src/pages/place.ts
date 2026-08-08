@@ -93,8 +93,9 @@ async function renderContent(options: ContentOptions): Promise<void> {
   content.replaceChildren();
   content.classList.add('content--revealed');
 
-  content.append(await buildHero(place, photos, store));
-  content.append(buildHeader(place, photos, options.slug, options.keyMaterial));
+  const hero = await buildHero(place, photos, store);
+  const header = buildHeader(place, photos, options.slug, options.keyMaterial);
+  content.append(hero, header);
 
   const galleryHost = document.createElement('section');
   galleryHost.className = 'gallery';
@@ -108,8 +109,42 @@ async function renderContent(options: ContentOptions): Promise<void> {
       await deletePhoto(options.slug, writeToken, photo.id);
       photos = photos.filter((p) => p.id !== photo.id);
       redrawGallery();
+      refreshHeaderAndHero();
     },
   } : {});
+
+  /**
+   * Riallinea intestazione e copertina all'elenco corrente.
+   *
+   * Serve perché caricare o cancellare foto cambia tre cose insieme — la griglia, il
+   * conteggio e la copertina — e aggiornarne solo una lascia sullo schermo la
+   * contraddizione più fastidiosa possibile: "0 foto" scritto sopra tre foto.
+   */
+  const refreshHeaderAndHero = () => {
+    const meta = header.querySelector('.place-header__meta');
+    if (meta) meta.textContent = describeSpan(photos);
+
+    const cover = coverOf({ ...place, photos });
+    if (!cover) {
+      hero.replaceChildren();
+      hero.classList.add('hero--empty');
+      return;
+    }
+
+    void store.url(cover.key).then((url) => {
+      const existing = hero.querySelector('img');
+      if (existing) {
+        existing.src = url;
+        return;
+      }
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = '';
+      image.className = 'hero__image';
+      hero.replaceChildren(image);
+      hero.classList.remove('hero--empty');
+    });
+  };
 
   let gallery: Gallery | null = null;
   const redrawGallery = () => {
@@ -138,6 +173,7 @@ async function renderContent(options: ContentOptions): Promise<void> {
       onFinished: (added) => {
         photos = [...photos, ...added].sort((a, b) => a.sortIndex - b.sortIndex);
         redrawGallery();
+        refreshHeaderAndHero();
       },
     });
   }

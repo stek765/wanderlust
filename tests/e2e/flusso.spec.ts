@@ -82,6 +82,35 @@ test('carica una foto e la ritrova nella griglia', async ({ page }) => {
   const tile = page.locator('.tile').first();
   await expect(tile).toBeVisible();
   await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/);
+
+  // Regressione: la griglia si aggiornava e l'intestazione no, lasciando "0 foto"
+  // scritto sopra le foto appena caricate.
+  await expect(page.locator('.place-header__meta')).toContainText('1 foto');
+  await expect(page.locator('.hero__image')).toBeVisible();
+});
+
+test('il visore resta chiuso finché non si tocca una foto', async ({ page }) => {
+  // Regressione: `.viewer` dichiara display:grid, che batte l'attributo `hidden` del
+  // browser. Senza una regola esplicita il visore resta nero sopra tutta la pagina e
+  // sembra che il sito non carichi.
+  const tagUrl = await creaPosto(page, 'Bangkok');
+  await page.goto(percorso(tagUrl));
+
+  await expect(page.locator('.place-header h1')).toHaveText('Bangkok', { timeout: 15_000 });
+  await expect(page.locator('.viewer')).toBeHidden();
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'ricordo.png',
+    mimeType: 'image/png',
+    buffer: PNG_4x4,
+  });
+  await expect(page.locator('.uploader__status')).toContainText('1 foto aggiunte', { timeout: 20_000 });
+
+  await page.locator('.tile').first().click();
+  await expect(page.locator('.viewer')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Chiudi' }).click();
+  await expect(page.locator('.viewer')).toBeHidden();
 });
 
 test('il token di scrittura sparisce dalla barra degli indirizzi', async ({ page }) => {
