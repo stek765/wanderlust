@@ -120,8 +120,10 @@ button {
   display: block;
 }
 
+/* Senza copertina non c'è niente da incorniciare: il riquadro sparisce invece di
+   restare come un buco scuro sopra il nome. */
 .hero--empty {
-  height: 24vh;
+  height: 0;
 }
 
 .place-header {

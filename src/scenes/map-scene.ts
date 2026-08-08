@@ -11,8 +11,13 @@
 
 import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
 
-/** Durata del volo. È anche il budget entro cui le miniature devono essere pronte. */
-export const FLIGHT_MS = 2500;
+/**
+ * Durata del volo. È anche il budget entro cui le miniature devono essere pronte.
+ *
+ * Tre secondi e non due e mezzo perché ora la camera ruota oltre a scendere, e la
+ * rotazione ha bisogno di respiro: compressa diventa uno strattone.
+ */
+export const FLIGHT_MS = 3000;
 
 /**
  * Lo stile della mappa. Tutti gratuiti e senza chiave API.
@@ -31,6 +36,19 @@ const STYLE_URL = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.j
 
 const START_ZOOM = 1.2;
 const ARRIVAL_ZOOM = 12.5;
+
+/**
+ * Il globo non parte inquadrando già la destinazione: parte spostato a ovest, così
+ * durante la discesa ruota per portare il posto sotto la camera. È la differenza fra
+ * "cala dritta dall'atmosfera" e "la Terra gira e tu ci atterri sopra".
+ */
+const START_LON_OFFSET = 55;
+
+/** Inclinazione della camera all'arrivo: dà la sensazione di posarsi, non di guardare dall'alto. */
+const ARRIVAL_PITCH = 50;
+
+/** La bussola ruota durante la discesa. Piccola: troppa farebbe girare la testa. */
+const START_BEARING = -28;
 
 /** Oltre questo, si rinuncia alle mappe e si mostrano comunque le foto. */
 const STYLE_TIMEOUT_MS = 5000;
@@ -65,8 +83,12 @@ export class MapScene {
     this.map = new maplibregl.Map({
       container: options.container,
       style: STYLE_URL,
-      center: [options.lon, options.lat],
+      // Spostato a ovest e ruotato: è la posizione da cui la discesa diventa un
+      // movimento, invece di uno zoom.
+      center: [options.lon - START_LON_OFFSET, options.lat * 0.5],
       zoom: START_ZOOM,
+      bearing: START_BEARING,
+      pitch: 0,
       attributionControl: { compact: true },
       // La scena si guarda, non si esplora: ogni gesto qui ruberebbe attenzione alle foto.
       interactive: false,
@@ -110,22 +132,29 @@ export class MapScene {
     this.map.flyTo({
       center: [lon, lat],
       zoom: ARRIVAL_ZOOM,
+      // Il globo ruota e la camera si inclina mentre scende: sono questi due, più del
+      // solo zoom, a far sembrare la scena un avvicinamento invece di un ingrandimento.
+      bearing: 0,
+      pitch: ARRIVAL_PITCH,
       duration: FLIGHT_MS,
       // Parte deciso e si posa piano, come una discesa vera.
       curve: 1.6,
       essential: true,
     });
 
-    await new Promise<void>((resolve) => {
-      const done = () => {
-        this.map.off('moveend', done);
-        resolve();
-      };
-      this.map.on('moveend', done);
-      // Se moveend non arrivasse (scheda in background, animazione interrotta) la scena
-      // non deve restare appesa: il tempo del volo è comunque scaduto.
-      setTimeout(done, FLIGHT_MS + 400);
-    });
+    /*
+     * Si aspetta il tempo, non l'evento `moveend`.
+     *
+     * Sembrerebbe più pulito aspettare l'evento, e invece era un bug: il cambio di
+     * proiezione a globo genera un `moveend` per conto suo, che arrivava subito dopo la
+     * partenza e veniva scambiato per "volo concluso". Risultato, le foto comparivano
+     * dopo mezzo secondo e dell'animazione non si vedeva niente.
+     *
+     * La durata la decidiamo noi e la passiamo a flyTo: aspettarla è sia più semplice
+     * sia più fedele all'idea di partenza, cioè che questo intervallo è il budget
+     * entro cui la decifratura deve avere finito.
+     */
+    await new Promise<void>((resolve) => setTimeout(resolve, FLIGHT_MS));
 
     this.dropPin();
   }

@@ -207,7 +207,9 @@ function renderResult(page: HTMLElement, place: CreatedPlace): void {
 function entryRow(entry: KeychainEntry): HTMLLIElement {
   const row = document.createElement('li');
   const link = document.createElement('a');
-  link.href = `/p/${entry.slug}#${entry.key}`;
+  // Con il token di scrittura: da qui dentro si è già i padroni di casa, e aprire un
+  // posto in sola lettura dalla pagina che l'ha creato non avrebbe senso.
+  link.href = buildTagUrl('', entry.slug, entry.writeToken, entry.key);
   link.textContent = entry.name;
 
   const date = document.createElement('span');
