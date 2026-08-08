@@ -15,9 +15,30 @@ export default defineConfig({
 
   use: {
     baseURL: 'http://127.0.0.1:8788',
-    ...devices['iPhone 13'],
     trace: 'retain-on-failure',
   },
+
+  projects: [
+    {
+      // Il dispositivo su cui questa cosa verrà davvero usata.
+      name: 'safari-iphone',
+      use: { ...devices['iPhone 13'] },
+    },
+    {
+      /*
+       * Solo i test marcati [HEIC], e c'è un motivo preciso: Safari l'HEIC lo decodifica
+       * da solo, quindi su WebKit il convertitore non verrebbe mai esercitato e un suo
+       * guasto passerebbe inosservato. Chrome invece l'HEIC non lo sa leggere: è qui che
+       * la conversione o funziona o si vede.
+       */
+      name: 'chrome-desktop',
+      grep: /\[HEIC\]/,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
+      },
+    },
+  ],
 
   webServer: {
     command: 'npm run dev',

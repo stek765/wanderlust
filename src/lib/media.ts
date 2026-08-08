@@ -67,14 +67,49 @@ export async function readTakenAt(file: File): Promise<number | null> {
   return null;
 }
 
+/**
+ * Vero se il file è HEIC/HEIF, il formato in cui l'iPhone salva le foto.
+ *
+ * Il tipo dichiarato dal browser non basta: molti browser su file .heic riportano
+ * stringa vuota, oppure `image/heif` invece di `image/heic`. Quando il tipo non aiuta
+ * si guarda l'estensione.
+ */
+export function looksLikeHeic(file: File): boolean {
+  const type = file.type.toLowerCase();
+  if (type.includes('heic') || type.includes('heif')) return true;
+  if (type.startsWith('image/') && type !== 'image/') return false;
+  return /\.hei[cf]$/i.test(file.name);
+}
+
+/**
+ * Converte un HEIC in JPEG, se serve.
+ *
+ * Serve perché **Chrome, Brave e Firefox non sanno decodificare l'HEIC**: createImageBitmap
+ * fallisce e la foto finirebbe fra quelle non caricate. Safari lo apre da solo, quindi
+ * su iPhone il problema spesso non si vede — ma "spesso" non è "sempre", e le foto
+ * caricate dal Mac passano quasi sempre da un browser che l'HEIC non lo sa leggere.
+ *
+ * Il decodificatore è un modulo WebAssembly di qualche megabyte: viene scaricato solo
+ * quando incontra davvero un HEIC, non all'apertura della pagina.
+ */
+async function toDecodableImage(file: File): Promise<Blob> {
+  if (!looksLikeHeic(file)) return file;
+
+  const { heicTo } = await import('heic-to');
+  return heicTo({ blob: file, type: 'image/jpeg', quality: 0.92 });
+}
+
 /** Prepara una foto: versione grande, miniatura, dimensioni e data. */
 export async function processImage(file: File): Promise<ProcessedImage> {
+  // I metadati si leggono dall'originale: la conversione in JPEG non conserva l'EXIF.
   const takenAt = await readTakenAt(file);
+
+  const decodable = await toDecodableImage(file);
 
   // `from-image` applica la rotazione EXIF ai pixel. Senza, le foto scattate in
   // verticale arriverebbero coricate — e la rotazione andrebbe persa comunque, visto
   // che ridisegnandole su canvas l'EXIF sparisce.
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const bitmap = await createImageBitmap(decodable, { imageOrientation: 'from-image' });
 
   try {
     const fullSize = computeTargetSize(bitmap.width, bitmap.height, FULL_MAX_EDGE);

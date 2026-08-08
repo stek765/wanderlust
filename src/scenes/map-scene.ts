@@ -17,7 +17,7 @@ import maplibregl, { type Map as MapLibreMap } from 'maplibre-gl';
  * Tre secondi e non due e mezzo perché ora la camera ruota oltre a scendere, e la
  * rotazione ha bisogno di respiro: compressa diventa uno strattone.
  */
-export const FLIGHT_MS = 3000;
+export const FLIGHT_MS = 3800;
 
 /**
  * Lo stile della mappa. Tutti gratuiti e senza chiave API.

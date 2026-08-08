@@ -49,6 +49,14 @@ globali che esistono anche nel browser — al punto che `element.append()` smett
 compilare. Da qui i due tsconfig separati: `tsconfig.json` per il browser,
 `tsconfig.worker.json` per il Worker. Non riunirli.
 
+**Le foto iPhone in HEIC vanno convertite nel browser.** Chrome, Brave e Firefox non
+sanno decodificare l'HEIC: `createImageBitmap` lo rifiuta e la foto finirebbe fra quelle
+non caricate. Safari invece lo apre da solo — verificato, stesso file: Chrome RIFIUTATO,
+WebKit decodificato. Da qui due conseguenze: la conversione con `heic-to` avviene solo
+quando serve, con import dinamico (il decodificatore WebAssembly pesa 734 KB gzippati e
+non deve stare nel caricamento iniziale); e il test `[HEIC]` gira su Chrome oltre che su
+Safari, perché su WebKit passerebbe anche col convertitore rotto.
+
 **MapLibre pesa 285 KB gzippati**, più di tutto il resto messo insieme. Su 4G lento
 compete con i 2,5 secondi di volo che dovrebbero coprire la decifratura. Se il primo
 tocco risultasse lento su un telefono vero, è il primo posto dove guardare.

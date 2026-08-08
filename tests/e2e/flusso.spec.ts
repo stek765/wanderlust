@@ -122,6 +122,22 @@ test('all\'arrivo si vede la mappa, non una foto', async ({ page }) => {
   await expect(page.locator('.cue')).toHaveCSS('opacity', '0');
 });
 
+test('[HEIC] una foto iPhone si carica anche dove il browser non sa leggerla', async ({ page }) => {
+  // Il file è un HEIC vero, prodotto con `sips -s format heic`. Su Chrome
+  // createImageBitmap lo rifiuta: se questo test passa, il convertitore ha funzionato.
+  const tagUrl = await creaPosto(page, 'Sardegna');
+  await page.goto(percorso(tagUrl));
+
+  await page.locator('input[type="file"]').waitFor({ state: 'attached', timeout: 20_000 });
+  await page.locator('input[type="file"]').setInputFiles('tests/fixtures/foto-iphone.heic');
+
+  // Generoso: la prima conversione deve scaricare il decodificatore WebAssembly.
+  await expect(page.locator('.uploader__status')).toContainText('1 foto aggiunte', { timeout: 60_000 });
+
+  const tile = page.locator('.tile').first();
+  await expect(tile.locator('img')).toHaveAttribute('src', /^blob:/, { timeout: 20_000 });
+});
+
 test('il visore resta chiuso finché non si tocca una foto', async ({ page }) => {
   // Regressione: `.viewer` dichiara display:grid, che batte l'attributo `hidden` del
   // browser. Senza una regola esplicita il visore resta nero sopra tutta la pagina e
