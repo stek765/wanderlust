@@ -26,6 +26,19 @@ export class Viewer {
   private readonly caption: HTMLElement;
   private index = 0;
   private readonly onKeyDown = (event: KeyboardEvent) => this.handleKey(event);
+  /**
+   * L'assestamento ancora da concludere, se ce n'è uno.
+   *
+   * Prima la conclusione era appesa a `transitionend`, e bastava cominciare un secondo
+   * gesto prima che l'animazione finisse perché quell'evento non arrivasse mai: la
+   * transizione veniva sostituita, l'ascoltatore restava lì, e l'indice non si aggiornava.
+   * Il gesto dopo ne faceva scattare due insieme e la fila restava parcheggiata a metà fra
+   * due foto. Andando piano non succedeva mai; andando veloce, sempre.
+   *
+   * Con un lavoro in sospeso richiamabile a mano, un gesto nuovo chiude prima quello di
+   * prima: lo stato non può restare a metà, qualunque cosa faccia il dito.
+   */
+  private inSospeso: (() => void) | null = null;
 
   constructor(
     private photos: PhotoDto[],
@@ -175,6 +188,13 @@ export class Viewer {
     );
   }
 
+  /** Chiude subito un assestamento rimasto a metà. Senza effetto se non ce n'è. */
+  private finalizza(): void {
+    const lavoro = this.inSospeso;
+    this.inSospeso = null;
+    lavoro?.();
+  }
+
   /** Mette la casella centrale davanti agli occhi. Con o senza animazione. */
   private centra(animato: boolean, durata = 320): void {
     this.track.style.transition = animato ? `transform ${durata}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none';
@@ -275,6 +295,10 @@ export class Viewer {
       (event) => {
         const tocco = event.touches[0];
         if (!tocco) return;
+        // Un gesto nuovo chiude quello di prima: senza, i due si sovrappongono e l'indice
+        // resta indietro di un passo.
+        this.finalizza();
+
         partenzaX = tocco.clientX;
         partenzaY = tocco.clientY;
         deciso = null;
@@ -328,19 +352,25 @@ export class Viewer {
         return;
       }
 
-      // Prima si accompagna la foto fino al centro, poi si ricompone la fila attorno a
-      // lei: invertendo l'ordine si vedrebbe il salto che questo pezzo esiste per evitare.
+      /*
+       * L'indice cambia subito, la fila ci arriva animata.
+       *
+       * Aggiornarlo qui e non a fine animazione è ciò che rende impossibile lo stato a
+       * metà: da questo istante il visore sa già quale foto sta guardando, e la
+       * ricomposizione è solo una conseguenza che può arrivare quando arriva.
+       */
+      this.index = prossimo;
+
       this.track.style.transition = `transform ${durata}ms cubic-bezier(0.22, 1, 0.36, 1)`;
       this.track.style.transform = `translateX(${passo > 0 ? '-66.6666%' : '0%'})`;
 
-      this.track.addEventListener(
-        'transitionend',
-        () => {
-          this.index = prossimo;
-          void this.show();
-        },
-        { once: true },
-      );
+      // Un tempo, non un evento: `transitionend` non arriva se la transizione viene
+      // sostituita, ed è esattamente quello che fa un secondo gesto.
+      const attesa = setTimeout(() => this.finalizza(), durata);
+      this.inSospeso = () => {
+        clearTimeout(attesa);
+        void this.show();
+      };
     };
 
     this.track.addEventListener('touchend', fine);

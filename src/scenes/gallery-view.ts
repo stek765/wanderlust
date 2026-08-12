@@ -53,6 +53,15 @@ export class GalleryView {
   private readonly conteggio: HTMLElement;
   /** Il pulsante che accende la selezione. Esiste solo per chi può cancellare. */
   private sceglitore: HTMLButtonElement | null = null;
+  /**
+   * Il cambio pagina ancora da concludere, se ce n'è uno.
+   *
+   * Stesso difetto che aveva il visore: la conclusione era appesa a `transitionend`, e un
+   * secondo scorrimento iniziato prima della fine sostituiva la transizione — quell'evento
+   * non arrivava più, la pagina non cambiava davvero e la fila restava a metà. Andando
+   * piano non capitava; andando veloce, sempre.
+   */
+  private inSospeso: (() => void) | null = null;
   /** Di quale foto è la tinta attualmente applicata: ricalcolarla a ogni foto è sprecato. */
   private tintaDi: string | null = null;
 
@@ -657,6 +666,13 @@ export class GalleryView {
         : describeSpan(this.photos);
   }
 
+  /** Chiude subito un cambio pagina rimasto a metà. Senza effetto se non ce n'è. */
+  private finalizza(): void {
+    const lavoro = this.inSospeso;
+    this.inSospeso = null;
+    lavoro?.();
+  }
+
   private centraPagine(animato: boolean, durata = 320): void {
     this.track.style.transition = animato ? `transform ${durata}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none';
     this.track.style.transform = 'translateX(-33.3333%)';
@@ -683,6 +699,9 @@ export class GalleryView {
       (event) => {
         const tocco = event.touches[0];
         if (!tocco) return;
+        // Un gesto nuovo chiude quello di prima, o i due si sovrappongono.
+        this.finalizza();
+
         partenzaX = tocco.clientX;
         partenzaY = tocco.clientY;
         deciso = null;
@@ -735,17 +754,17 @@ export class GalleryView {
       this.track.style.transition = `transform ${durata}ms cubic-bezier(0.22, 1, 0.36, 1)`;
       this.track.style.transform = `translateX(${passo > 0 ? '-66.6666%' : '0%'})`;
 
-      this.track.addEventListener(
-        'transitionend',
-        () => {
-          this.pagina = prossima;
-          this.ruota(passo);
-          // Una pagina nuova si guarda dall'alto: continuare da dove si era rimasti nella
-          // precedente non vuol dire niente.
-          this.paginaCorrente.scrollTop = 0;
-        },
-        { once: true },
-      );
+      // Un tempo, non un evento: `transitionend` non arriva se la transizione viene
+      // sostituita, ed è esattamente quello che fa un secondo scorrimento.
+      const attesa = setTimeout(() => this.finalizza(), durata);
+      this.inSospeso = () => {
+        clearTimeout(attesa);
+        this.pagina = prossima;
+        this.ruota(passo);
+        // Una pagina nuova si guarda dall'alto: continuare da dove si era rimasti nella
+        // precedente non vuol dire niente.
+        this.paginaCorrente.scrollTop = 0;
+      };
     };
 
     this.track.addEventListener('touchend', fine);
