@@ -8,8 +8,10 @@
 
 import { Hono } from 'hono';
 import type {
-  CreatePlaceRequest,
-  CreatePlaceResponse,
+  CreateStopRequest,
+  CreateStopResponse,
+  CreateTripRequest,
+  CreateTripResponse,
   RegisterPhotoRequest,
   RegisterPhotoResponse,
   UploadMediaResponse,
@@ -32,7 +34,7 @@ const MAX_MEDIA_BYTES = 15 * 1024 * 1024;
 const app = new Hono<{ Bindings: Env }>();
 
 // ---------------------------------------------------------------------------
-// Media: lettura pubblica, scrittura col token del posto
+// Media: lettura pubblica, scrittura col token del viaggio
 // ---------------------------------------------------------------------------
 
 /**
@@ -68,8 +70,120 @@ app.get('/media/*', async (c) => {
   return response;
 });
 
+// ---------------------------------------------------------------------------
+// Viaggi: solo dalla pagina master
+// ---------------------------------------------------------------------------
+
+app.post('/api/trips', async (c) => {
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
+
+  const body = await c.req.json<CreateTripRequest>().catch(() => null);
+  if (!body || typeof body.name !== 'string' || !body.name.trim()) {
+    return c.json({ error: 'nome mancante' }, 400);
+  }
+
+  const slug = randomId(12);
+  const writeToken = randomToken();
+
+  await db.insertTrip(c.env.DB, {
+    slug,
+    name: body.name.trim(),
+    writeTokenHash: await sha256Hex(writeToken),
+  });
+
+  // Unica occasione in cui il token viaggia in chiaro: da qui finisce negli URL dei tag.
+  return c.json<CreateTripResponse>({ slug, writeToken }, 201);
+});
+
+/** L'elenco che riempie il menu. Nessun token, nessun hash: finisce nel DOM. */
+app.get('/api/trips', async (c) => {
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
+  return c.json(await db.listTrips(c.env.DB));
+});
+
+/**
+ * Il viaggio con tutte le sue tappe: è questo che apre il magnete. Aperta, perché senza
+ * chiave i riferimenti alle foto non servono a niente.
+ */
+app.get('/api/trips/:slug', async (c) => {
+  const trip = await db.getTrip(c.env.DB, c.req.param('slug'));
+  // 404 identica per slug inesistente e slug mai esistito: non confermiamo indovinelli.
+  if (!trip) return c.json({ error: 'non trovato' }, 404);
+  return c.json(trip);
+});
+
+/** Sceglie la copertina del viaggio fra le sue foto. */
+app.patch('/api/trips/:slug/cover', async (c) => {
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
+
+  const body = await c.req.json<{ photoId?: string }>().catch(() => null);
+  if (!body?.photoId) return c.json({ error: 'photoId mancante' }, 400);
+
+  const ok = await db.setTripCover(c.env.DB, c.req.param('slug'), body.photoId);
+  if (!ok) return c.json({ error: 'foto non trovata in questo viaggio' }, 404);
+
+  return c.json({ ok: true });
+});
+
+app.delete('/api/trips/:slug', async (c) => {
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
+
+  const orphans = await db.deleteTrip(c.env.DB, c.req.param('slug'));
+  // R2 non sa niente di chiavi esterne: i blob vanno tolti a mano, o restano lì a pesare.
+  if (orphans.length > 0) await c.env.MEDIA.delete(orphans);
+
+  return c.json({ ok: true });
+});
+
+/**
+ * Aggiunge una tappa. Richiede il token master e non quello di scrittura, perché una
+ * tappa nuova significa un magnete nuovo, e i magneti li fa solo chi ha il portachiavi.
+ */
+app.post('/api/trips/:slug/stops', async (c) => {
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
+
+  const body = await c.req.json<CreateStopRequest>().catch(() => null);
+  if (!body || typeof body.name !== 'string' || !body.name.trim()) {
+    return c.json({ error: 'nome mancante' }, 400);
+  }
+  if (!isLatitude(body.lat) || !isLongitude(body.lon)) {
+    return c.json({ error: 'coordinate non valide' }, 400);
+  }
+
+  const slug = randomId(12);
+  const created = await db.insertStop(c.env.DB, {
+    slug,
+    tripSlug: c.req.param('slug'),
+    name: body.name.trim(),
+    lat: body.lat,
+    lon: body.lon,
+  });
+
+  if (!created) return c.json({ error: 'viaggio non trovato' }, 404);
+  return c.json<CreateStopResponse>({ slug }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Tappe
+// ---------------------------------------------------------------------------
+
+
+
+/**
+ * Cancella una tappa. Token master, come per crearla: una tappa che sparisce è un magnete
+ * in meno, e i magneti li governa chi ha il portachiavi.
+ */
+app.delete('/api/stops/:slug', async (c) => {
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
+
+  const orphans = await db.deleteStop(c.env.DB, c.req.param('slug'));
+  if (orphans.length > 0) await c.env.MEDIA.delete(orphans);
+
+  return c.json({ ok: true });
+});
+
 /** Carica un blob già cifrato dal browser e restituisce dove è finito. */
-app.post('/api/places/:slug/media', async (c) => {
+app.post('/api/stops/:slug/media', async (c) => {
   const slug = c.req.param('slug');
   if (!(await canWrite(c.env, c.req.raw, slug))) return unauthorized(c);
 
@@ -82,55 +196,16 @@ app.post('/api/places/:slug/media', async (c) => {
   if (body.byteLength === 0) return c.json({ error: 'corpo vuoto' }, 400);
   if (body.byteLength > MAX_MEDIA_BYTES) return c.json({ error: 'file troppo grande' }, 413);
 
-  // La chiave comincia con lo slug: un token di scrittura non può depositare file
-  // nello spazio di un altro posto. L'id casuale la rende non indovinabile.
+  // La chiave comincia con lo slug della tappa: anche dentro lo stesso viaggio i file
+  // restano separati, e l'id casuale la rende non indovinabile.
   const key = `${slug}/${randomId(16)}-${kind}`;
   await c.env.MEDIA.put(key, body);
 
   return c.json<UploadMediaResponse>({ key });
 });
 
-// ---------------------------------------------------------------------------
-// Posti
-// ---------------------------------------------------------------------------
-
-/** Creazione di un posto. Solo dalla pagina master. */
-app.post('/api/places', async (c) => {
-  if (!(await tokenMatches(bearerToken(c.req.raw), c.env.MASTER_TOKEN_HASH))) return unauthorized(c);
-
-  const body = await c.req.json<CreatePlaceRequest>().catch(() => null);
-  if (!body || typeof body.name !== 'string' || !body.name.trim()) {
-    return c.json({ error: 'nome mancante' }, 400);
-  }
-  if (!isLatitude(body.lat) || !isLongitude(body.lon)) {
-    return c.json({ error: 'coordinate non valide' }, 400);
-  }
-
-  const slug = randomId(12);
-  const writeToken = randomToken();
-
-  await db.insertPlace(c.env.DB, {
-    slug,
-    name: body.name.trim(),
-    lat: body.lat,
-    lon: body.lon,
-    writeTokenHash: await sha256Hex(writeToken),
-  });
-
-  // Unica occasione in cui il token viaggia in chiaro: da qui finisce nell'URL del tag.
-  return c.json<CreatePlaceResponse>({ slug, writeToken }, 201);
-});
-
-/** Il posto e le sue foto. Aperta: senza chiave i riferimenti non servono a niente. */
-app.get('/api/places/:slug', async (c) => {
-  const place = await db.getPlaceWithPhotos(c.env.DB, c.req.param('slug'));
-  // 404 identica per slug inesistente e slug mai esistito: non confermiamo indovinelli.
-  if (!place) return c.json({ error: 'non trovato' }, 404);
-  return c.json(place);
-});
-
 /** Registra una foto già caricata su R2. */
-app.post('/api/places/:slug/photos', async (c) => {
+app.post('/api/stops/:slug/photos', async (c) => {
   const slug = c.req.param('slug');
   if (!(await canWrite(c.env, c.req.raw, slug))) return unauthorized(c);
 
@@ -145,7 +220,7 @@ app.post('/api/places/:slug/photos', async (c) => {
   const id = randomId(16);
   const sortIndex = await db.insertPhoto(c.env.DB, {
     id,
-    placeSlug: slug,
+    stopSlug: slug,
     key: body.key,
     thumbKey: body.thumbKey,
     width: body.width,
@@ -153,24 +228,10 @@ app.post('/api/places/:slug/photos', async (c) => {
     takenAt: typeof body.takenAt === 'number' ? body.takenAt : null,
   });
 
-  await db.setCoverIfUnset(c.env.DB, slug, id);
-
   return c.json<RegisterPhotoResponse>({ id, sortIndex }, 201);
 });
 
-app.patch('/api/places/:slug/cover', async (c) => {
-  const slug = c.req.param('slug');
-  if (!(await canWrite(c.env, c.req.raw, slug))) return unauthorized(c);
-
-  const body = await c.req.json<{ photoId?: string }>().catch(() => null);
-  if (!body?.photoId) return c.json({ error: 'photoId mancante' }, 400);
-
-  const updated = await db.setCoverPhoto(c.env.DB, slug, body.photoId);
-  if (!updated) return c.json({ error: 'foto non trovata' }, 404);
-  return c.json({ ok: true });
-});
-
-app.delete('/api/places/:slug/photos/:id', async (c) => {
+app.delete('/api/stops/:slug/photos/:id', async (c) => {
   const slug = c.req.param('slug');
   if (!(await canWrite(c.env, c.req.raw, slug))) return unauthorized(c);
 
@@ -185,7 +246,7 @@ app.delete('/api/places/:slug/photos/:id', async (c) => {
 
 /** Scarica l'indice. Serve alla pagina master per il backup manuale. */
 app.get('/api/backup', async (c) => {
-  if (!(await tokenMatches(bearerToken(c.req.raw), c.env.MASTER_TOKEN_HASH))) return unauthorized(c);
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
   return c.json(await db.dumpAll(c.env.DB));
 });
 
@@ -217,13 +278,22 @@ function unauthorized(c: { json: (body: unknown, status: 401) => Response }): Re
   return c.json({ error: 'non autorizzato' }, 401);
 }
 
-async function canWrite(env: Env, request: Request, slug: string): Promise<boolean> {
-  const place = await db.getPlaceRow(env.DB, slug);
-  if (!place) return false;
-  return tokenMatches(bearerToken(request), place.write_token_hash);
+async function isMaster(env: Env, request: Request): Promise<boolean> {
+  return tokenMatches(bearerToken(request), env.MASTER_TOKEN_HASH);
 }
 
-/** Impedisce che un token valido per un posto tocchi i file di un altro. */
+/**
+ * Il permesso di scrivere appartiene al viaggio, non alla tappa: si risale dalla tappa
+ * toccata al viaggio che la contiene. È questo che permette di caricare foto su Bangkok
+ * dopo aver toccato il magnete di Chiang Mai.
+ */
+async function canWrite(env: Env, request: Request, stopSlug: string): Promise<boolean> {
+  const hash = await db.getWriteTokenHashByStop(env.DB, stopSlug);
+  if (!hash) return false;
+  return tokenMatches(bearerToken(request), hash);
+}
+
+/** Impedisce che un token valido per un viaggio depositi file nello spazio di una tappa altrui. */
 function isOwnKey(key: unknown, slug: string): boolean {
   return typeof key === 'string' && key.startsWith(`${slug}/`);
 }

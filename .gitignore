@@ -5,3 +5,6 @@ dist/
 .wrangler/
 test-results/
 playwright-report/
+
+# Contiene le credenziali del progetto: sta sul disco, non nel repo.
+CLAUDE.md

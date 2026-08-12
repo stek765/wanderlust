@@ -1,7 +1,7 @@
 # Viaggi, rotte e scorrimento continuo — Design
 
 **Data:** 2026-08-10
-**Stato:** design approvato, da implementare
+**Stato:** implementato
 **Sostituisce parti di:** `2026-08-06-ricordi-nfc-design.md`
 
 ## Cosa cambia, in una frase

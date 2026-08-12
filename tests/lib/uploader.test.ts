@@ -129,6 +129,46 @@ describe('coda di caricamento', () => {
     expect(progress.done).toBe(1);
   });
 
+  it('fermata, non fa partire quelle che non sono ancora partite', async () => {
+    const partite: string[] = [];
+
+    const queue: UploadQueue = new UploadQueue(async (file) => {
+      partite.push(file.name);
+      // Alla prima foto qualcuno preme "Ferma".
+      if (partite.length === 1) queue.cancel();
+      await new Promise((r) => setTimeout(r, 5));
+    }, noWait);
+
+    queue.add(files(20));
+    const progress = await queue.run();
+
+    expect(progress.cancelled).toBe(true);
+    // Le quattro già in volo arrivano comunque: una richiesta a metà non si richiama
+    // indietro. La quinta non parte.
+    expect(partite.length).toBeLessThanOrEqual(4);
+    // Le altre restano in attesa, non fallite: non sono andate male, non sono partite.
+    expect(progress.items.filter((i) => i.status === 'attesa').length).toBeGreaterThanOrEqual(16);
+    expect(progress.failed).toBe(0);
+  });
+
+  it('scegliere altre foto fa ripartire una coda fermata', async () => {
+    const caricate: string[] = [];
+    const queue = new UploadQueue(async (file) => void caricate.push(file.name), noWait);
+
+    queue.add(files(3));
+    queue.cancel();
+    await queue.run();
+    expect(caricate).toHaveLength(0);
+
+    queue.add([fakeFile('nuova.jpg')]);
+    await queue.run();
+
+    // `add` è una richiesta nuova, e riprende anche quelle rimaste ferme: chi torna a
+    // scegliere foto non si aspetta che le precedenti restino lì per sempre.
+    expect(caricate).toContain('nuova.jpg');
+    expect(caricate).toHaveLength(4);
+  });
+
   it('racconta l\'avanzamento mentre lavora', async () => {
     const istantanee: number[] = [];
 

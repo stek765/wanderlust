@@ -10,8 +10,7 @@ import type { PhotoDto } from '../../shared/api-types';
 import type { PhotoStore } from '../lib/photo-store';
 
 export interface ViewerActions {
-  /** Presenti solo per chi ha il token di scrittura. */
-  onSetCover?: (photo: PhotoDto) => Promise<void>;
+  /** Presente solo per chi ha il token di scrittura. */
   onDelete?: (photo: PhotoDto) => Promise<void>;
 }
 
@@ -23,9 +22,9 @@ export class Viewer {
   private readonly onKeyDown = (event: KeyboardEvent) => this.handleKey(event);
 
   constructor(
-    private readonly photos: PhotoDto[],
+    private photos: PhotoDto[],
     private readonly store: PhotoStore,
-    private readonly actions: ViewerActions = {},
+    private actions: ViewerActions = {},
   ) {
     this.root = document.createElement('div');
     this.root.className = 'viewer';
@@ -38,7 +37,9 @@ export class Viewer {
     this.caption = document.createElement('p');
     this.caption.className = 'viewer__caption';
 
-    this.root.append(this.buildTopBar(), this.image, this.caption, this.buildNav());
+    // Il contatore vive dentro la barra, non in una riga sua: da solo in mezzo al nero
+    // sembrava un residuo, e rubava spazio verticale alla foto.
+    this.root.append(this.buildTopBar(), this.image, this.buildNav());
     document.body.append(this.root);
     this.attachSwipe();
   }
@@ -56,6 +57,30 @@ export class Viewer {
     this.root.hidden = true;
     document.body.classList.remove('is-locked');
     document.removeEventListener('keydown', this.onKeyDown);
+  }
+
+  /**
+   * Cambia l'elenco su cui si scorre.
+   *
+   * Il visore è uno solo per tutta la pagina, mentre le tappe sono tante: aprire una foto
+   * di Phuket significa prima dirgli che adesso si scorre fra quelle di Phuket. Un visore
+   * per tappa sarebbe stato più semplice da scrivere e avrebbe lasciato in pagina otto
+   * sovrapposti a schermo intero, tutti nascosti, tutti pronti a sbagliare.
+   */
+  setPhotos(photos: PhotoDto[]): void {
+    this.photos = photos;
+  }
+
+  /**
+   * Dice al visore cosa può fare, dopo che è stato costruito.
+   *
+   * Serve perché chi cancella ha bisogno di sapere quale tappa è aperta, e quella
+   * informazione vive in un pezzo che nasce dopo il visore. La barra viene ricostruita,
+   * perché il pulsante "Elimina" esiste solo se c'è qualcuno che sa cancellare.
+   */
+  setActions(actions: ViewerActions): void {
+    this.actions = actions;
+    this.root.querySelector('.viewer__bar')?.replaceWith(this.buildTopBar());
   }
 
   private async show(): Promise<void> {
@@ -107,16 +132,7 @@ export class Viewer {
     bar.className = 'viewer__bar';
 
     const close = button('Chiudi', 'viewer__close', () => this.close());
-    bar.append(close);
-
-    if (this.actions.onSetCover) {
-      bar.append(
-        button('Copertina', 'viewer__action', async () => {
-          const photo = this.photos[this.index];
-          if (photo) await this.actions.onSetCover?.(photo);
-        }),
-      );
-    }
+    bar.append(close, this.caption);
 
     if (this.actions.onDelete) {
       bar.append(

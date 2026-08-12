@@ -1,22 +1,24 @@
 /**
- * Il portachiavi della pagina master.
+ * Il portachiavi dei viaggi.
  *
- * Le chiavi di cifratura esistono in due posti soli: dentro l'URL scritto sul tag NFC, e
- * qui. Se si perdono entrambi, quelle foto non le riapre più nessuno — non c'è recupero,
- * non c'è assistenza, non c'è scorciatoia.
+ * Le chiavi di cifratura esistono in due posti soli: dentro gli URL scritti sui tag NFC di
+ * un viaggio, e qui. Se si perdono entrambi, quelle foto non le riapre più nessuno — non
+ * c'è recupero, non c'è assistenza, non c'è scorciatoia.
  *
  * Per questo il portachiavi sa fare una cosa che sembra banale e non lo è: esportarsi.
- * Il file JSON che produce va in 1Password, e va rifatto a ogni posto nuovo.
+ * Il file JSON che produce va in 1Password, e va rifatto a ogni viaggio nuovo — aggiungere
+ * una tappa invece non produce chiavi nuove, perché la chiave è del viaggio.
  */
 
 const STORAGE_KEY = 'ricordi:keychain';
 
 export interface KeychainEntry {
+  /** Lo slug del VIAGGIO: la chiave e il token valgono per tutte le sue tappe. */
   slug: string;
   name: string;
-  /** La chiave in base64url, la stessa che sta nel frammento dell'URL. */
+  /** La chiave in base64url, la stessa che sta nel frammento degli URL del viaggio. */
   key: string;
-  /** Il token di scrittura: senza, il tag NFC non si potrebbe riscrivere se si rompe. */
+  /** Il token di scrittura: senza, i tag NFC non si potrebbero riscrivere se si rompono. */
   writeToken: string;
   createdAt: number;
 }
@@ -36,7 +38,7 @@ export function loadKeychain(storage: Storage): KeychainEntry[] {
 }
 
 export function addToKeychain(storage: Storage, entry: KeychainEntry): KeychainEntry[] {
-  // Uno slug è unico: se ricompare è lo stesso posto ricreato, e vince il nuovo.
+  // Uno slug è unico: se ricompare è lo stesso viaggio ricreato, e vince il nuovo.
   const entries = [...loadKeychain(storage).filter((e) => e.slug !== entry.slug), entry];
   storage.setItem(STORAGE_KEY, JSON.stringify(entries));
   return entries;
@@ -48,7 +50,7 @@ export function exportKeychain(entries: KeychainEntry[]): Blob {
     avviso:
       'Queste chiavi sono l\'unico modo per riaprire le foto. Senza, sono perse per sempre. Conservare in un gestore di password.',
     esportatoIl: new Date().toISOString(),
-    posti: entries,
+    viaggi: entries,
   };
   return new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
 }

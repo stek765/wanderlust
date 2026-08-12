@@ -19,10 +19,9 @@
     {
       "binding": "DB",
       "database_name": "ricordi",
-      // DA FARE (Stefano): `npx wrangler d1 create ricordi` e incollare qui l'id
-      // restituito. In locale questo valore non viene usato: `wrangler dev` crea un
-      // SQLite finto sotto .wrangler/ e ignora l'id.
-      "database_id": "PLACEHOLDER-DA-SOSTITUIRE",
+      // Creato il 12/08/2026, regione WEUR. In locale questo valore non viene usato:
+      // `wrangler dev` crea un SQLite finto sotto .wrangler/ e ignora l'id.
+      "database_id": "29531b1d-76e8-4388-9eef-999c594af6e3",
       "migrations_dir": "migrations"
     }
   ],
@@ -30,15 +29,19 @@
   "r2_buckets": [
     {
       "binding": "MEDIA",
-      // DA FARE (Stefano): `npx wrangler r2 bucket create ricordi-media`.
-      // In locale wrangler emula il bucket su disco, non serve crearlo per sviluppare.
+      // Creato il 12/08/2026. In locale wrangler emula il bucket su disco.
       "bucket_name": "ricordi-media"
     }
   ],
 
   // Backup settimanale dell'indice: domenica alle 4:00 UTC.
+  //
+  // `SUN` e non `0`: nel cron di Cloudflare il giorno della settimana va da 1 a 7 (oppure
+  // per nome), e non esiste il giorno 0 della convenzione unix. Con `0 4 * * 0` il Worker
+  // sale lo stesso e poi il deploy fallisce sul trigger — "invalid cron string" —
+  // lasciando il sito online ma senza backup.
   "triggers": {
-    "crons": ["0 4 * * 0"]
+    "crons": ["0 4 * * SUN"]
   },
 
   "observability": {

@@ -1,19 +1,50 @@
 /*
  * Fondo scuro ovunque: le foto sono il contenuto, tutto il resto deve sparire.
  * Nessun tema chiaro — questa pagina si guarda, non si legge.
+ *
+ * Tre regole tenute strette in tutto il file, perché sono quelle che si perdono per
+ * prime quando si aggiunge un pezzo di fretta:
+ *
+ *   1. UN accento solo (--accento) e le sue due luminosità. Niente colori nuovi.
+ *   2. TRE raggi soli (--r-s, --r-m, pillola). Niente valori inventati sul posto.
+ *   3. Il rosso esiste per una cosa sola: distruggere qualcosa in modo definitivo.
  */
 
 @import 'maplibre-gl/dist/maplibre-gl.css';
 
 :root {
-  --sfondo: #0b0f14;
-  --testo: #f2f5f7;
-  --tenue: #8d9aa6;
-  --bordo: #1e2833;
-  --accento: #4aa3ff;
-  --pin: #ff3d8f;
+  --sfondo: #0a0d12;
+  --superficie: #11161d;
+  --testo: #eef2f5;
+  --tenue: #8c99a6;
+  --fioco: #5c6875;
+  --bordo: #1c242e;
+  --accento: #2596be;
+  /* Più chiaro dell'accento, e non per capriccio: su Dark Matter il #2596be pieno si
+     confonde con il grigio dell'acqua. Il pin deve staccare, l'interfaccia no. */
+  --pin: #4fc4e0;
+  --rotta: #7fd8ec;
   --pericolo: #ff6b6b;
-  --raggio: 12px;
+
+  --r-s: 10px;
+  --r-m: 16px;
+
+  /* Larghezza massima del contenuto. Senza, su un portatile le foto finiscono
+     ammucchiate a sinistra dentro un mare nero. */
+  --colonna: 1080px;
+
+  /*
+   * Il ritmo del movimento, uguale in tutto il sito.
+   *
+   * Entrare è più lento che uscire: un'uscita lenta fa sembrare l'interfaccia impastata,
+   * e chi ha appena chiuso qualcosa vuole vederla sparire. La curva morbida è quella che
+   * fa sembrare le cose spinte da qualcosa invece che animate.
+   */
+  --entra: 260ms;
+  --esce: 170ms;
+  --molla: cubic-bezier(0.16, 1, 0.3, 1);
+  --uscita: cubic-bezier(0.4, 0, 1, 1);
+
   color-scheme: dark;
 }
 
@@ -38,11 +69,22 @@ button {
   cursor: pointer;
 }
 
+/* Tutto ciò che si tocca si abbassa di un pelo: è l'unico riscontro fisico che questa
+   interfaccia dà, e senza sembra che i tocchi non arrivino. */
+button:active {
+  transform: translateY(1px);
+}
+
+:focus-visible {
+  outline: 2px solid var(--pin);
+  outline-offset: 2px;
+}
+
 /* --- La scena della mappa ------------------------------------------------- */
 
 /*
- * Fissa dietro a tutto: il contenuto le scorre sopra. Il globo resta visibile ai bordi
- * anche dopo l'atterraggio, così la pagina non perde il senso del luogo.
+ * La mappa è la scena: occupa tutto lo schermo e ci resta. Sopra ci galleggiano solo il
+ * nome del viaggio e il carosello delle tappe.
  */
 .map {
   position: fixed;
@@ -50,211 +92,400 @@ button {
   z-index: 0;
 }
 
-/* L'attribuzione sta in alto e sottotono: obbligatoria per licenza, ma non è
-   contenuto — non deve competere col nome del posto. */
-.maplibregl-ctrl-top-right {
-  top: calc(env(safe-area-inset-top) + 8px);
-  opacity: 0.45;
+/*
+ * L'attribuzione è obbligatoria per licenza, non è contenuto.
+ *
+ * MapLibre la disegna come una pillola chiara e larga che, su uno schermo quasi nero,
+ * diventa la cosa più luminosa della pagina. Qui viene rimpicciolita e spenta fino a
+ * essere leggibile ma silenziosa: resta un credito, smette di essere un titolo.
+ */
+.maplibregl-ctrl-bottom-right {
+  z-index: 1;
+}
+
+.maplibregl-ctrl-attrib {
+  background: rgb(10 13 18 / 55%) !important;
+  border-radius: var(--r-s) 0 0 0;
+}
+
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib a {
+  color: var(--fioco) !important;
+  font-size: 9px !important;
+  line-height: 1.4;
+}
+
+/* Su schermo stretto la riga non ci sta e usciva dal bordo tagliata a metà: qui va a
+   capo invece di scappare. */
+.maplibregl-ctrl-attrib-inner {
+  display: inline-block;
+  max-width: 60vw;
+}
+
+.maplibregl-ctrl-attrib-button {
+  transform: scale(0.7);
+  opacity: 0.5;
 }
 
 /*
- * Magenta e non blu: su una mappa quasi nera il blu si confonde con l'acqua, il magenta
- * no. È anche il colore del pin nel video di riferimento, per lo stesso motivo.
+ * Il pin è una ciambella: anello bianco fuori, azzurro pieno dentro, occhio scuro al
+ * centro. La forma è quella del video di riferimento, il colore è il nostro.
+ *
+ * L'anello bianco non è decorazione: la mappa ora ha terra chiarissima e mare nero, e un
+ * pin senza bordo sparirebbe su una delle due. Il bianco lo stacca da entrambe.
  */
 .pin {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   background: var(--pin);
-  border: 2px solid #fff;
-  box-shadow: 0 0 12px rgb(255 61 143 / 60%);
-  animation: pulsa 2s ease-out infinite;
+  border: 2.5px solid #fff;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 22%),
+    0 2px 5px rgb(0 0 0 / 35%),
+    inset 0 0 0 2.5px rgb(6 20 28 / 55%);
+  transition: width 240ms ease, height 240ms ease;
 }
 
-@keyframes pulsa {
-  0% { box-shadow: 0 0 12px rgb(255 61 143 / 60%), 0 0 0 0 rgb(255 61 143 / 55%); }
-  70% { box-shadow: 0 0 12px rgb(255 61 143 / 60%), 0 0 0 24px rgb(255 61 143 / 0%); }
-  100% { box-shadow: 0 0 12px rgb(255 61 143 / 60%), 0 0 0 0 rgb(255 61 143 / 0%); }
-}
-
-/* --- Il contenuto che si apre dal pin -------------------------------------- */
-
-.content {
-  position: relative;
-  z-index: 1;
-  /* Prima dell'atterraggio il contenuto non esiste ancora: si vede solo il globo. */
-  opacity: 0;
+/* La tappa che si sta guardando: più grande e con un battito. Le altre restano ciambelle
+   ferme, così la rotta si legge tutta ma una sola dice "sei qui". */
+.pin--active {
+  width: 17px;
+  height: 17px;
+  animation: pulsa 2.6s ease-out infinite;
 }
 
 /*
- * Solo una dissolvenza: il movimento vero lo fanno gli elementi del titolo, uno dopo
- * l'altro. Muovere anche il contenitore li farebbe scivolare due volte.
+ * Il battito è un anello che si allarga e svanisce, non un alone fisso: fisso copriva il
+ * nome del posto per sempre, così invece lo attraversa e se ne va.
  */
-.content--revealed {
-  animation: comparsa 500ms ease forwards;
+@keyframes pulsa {
+  0%   { box-shadow: 0 0 0 1px rgb(0 0 0 / 22%), 0 2px 5px rgb(0 0 0 / 35%), inset 0 0 0 2.5px rgb(6 20 28 / 55%), 0 0 0 0 rgb(79 196 224 / 55%); }
+  70%  { box-shadow: 0 0 0 1px rgb(0 0 0 / 22%), 0 2px 5px rgb(0 0 0 / 35%), inset 0 0 0 2.5px rgb(6 20 28 / 55%), 0 0 0 18px rgb(79 196 224 / 0%); }
+  100% { box-shadow: 0 0 0 1px rgb(0 0 0 / 22%), 0 2px 5px rgb(0 0 0 / 35%), inset 0 0 0 2.5px rgb(6 20 28 / 55%), 0 0 0 0 rgb(79 196 224 / 0%); }
 }
 
-@keyframes comparsa {
-  to { opacity: 1; }
-}
-
-/* Chi ha chiesto meno movimento al sistema riceve la stessa pagina, ferma. */
-@media (prefers-reduced-motion: reduce) {
-  .content--revealed,
-  .place-header h1,
-  .place-header h1::after,
-  .place-header__meta,
-  .share,
-  .cue {
-    animation-duration: 1ms;
-    animation-delay: 0ms;
-  }
-  .pin,
-  .cue__arrow {
-    animation: none;
-  }
-}
-
-/* --- La scena d'arrivo ----------------------------------------------------- */
+/* --- Il nome del viaggio e il carosello ------------------------------------ */
 
 /*
- * Alta quanto lo schermo e trasparente: la mappa appena raggiunta resta padrona di
- * tutto il primo schermo, e le foto cominciano sotto. Nessuna copertina, nessuna foto
- * scelta a caso — l'arrivo è uguale per tutti i posti.
+ * La mappa è a tutto schermo e sotto tutto; questo strato ci galleggia sopra e tiene
+ * insieme le due sole cose che stanno sulla scena: il nome in alto, le tappe in fondo.
  */
 .stage {
-  position: relative;
-  min-height: 100svh;
+  position: fixed;
+  inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 0 20px calc(env(safe-area-inset-bottom) + 26px);
-}
-
-/* Rende leggibile il testo bianco senza coprire la mappa: trasparente in alto, pieno
-   dove comincia la griglia, così lo stacco fra scena e foto non si vede. */
-.stage__scrim {
-  position: absolute;
-  inset: auto 0 0;
-  height: 62%;
+  justify-content: space-between;
   pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgb(11 15 20 / 0%) 0%,
-    rgb(11 15 20 / 55%) 45%,
-    rgb(11 15 20 / 92%) 80%,
-    var(--sfondo) 100%
-  );
 }
 
-.place-header {
-  position: relative;
-  padding: 0 0 22px;
+/* Solo i comandi rispondono al tocco: in mezzo c'è la mappa, e deve restare guardabile. */
+.stage > * {
+  pointer-events: auto;
 }
 
-.place-header h1 {
+.trip-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 14px) 16px 20px 62px;
+  background: linear-gradient(to bottom, rgb(6 9 13 / 78%), rgb(6 9 13 / 0%));
+}
+
+.trip-title h1 {
   margin: 0;
-  font-size: clamp(42px, 13vw, 76px);
-  line-height: 0.98;
-  letter-spacing: -0.035em;
-  text-wrap: balance;
-  text-shadow: 0 2px 30px rgb(0 0 0 / 60%);
-  /* Sale da sotto la propria riga di base, come una scritta che emerge. */
-  animation: sali 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* La riga che si disegna sotto il nome: il dettaglio che fa sembrare l'arrivo
-   una scena e non una schermata. */
-.place-header h1::after {
-  content: '';
-  display: block;
-  height: 2px;
-  margin-top: 14px;
-  border-radius: 2px;
-  background: linear-gradient(to right, var(--pin), rgb(255 61 143 / 0%));
-  transform-origin: left;
-  animation: traccia 1100ms cubic-bezier(0.16, 1, 0.3, 1) 260ms both;
-}
-
-.place-header__meta {
-  margin: 14px 0 18px;
-  color: var(--tenue);
-  font-size: 14px;
-  letter-spacing: 0.02em;
-  animation: sali 700ms cubic-bezier(0.16, 1, 0.3, 1) 420ms both;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-shadow: 0 1px 10px rgb(0 0 0 / 80%);
 }
 
 .share {
-  padding: 10px 18px;
-  border: 1px solid rgb(255 255 255 / 22%);
+  padding: 8px 15px;
+  border: 1px solid rgb(255 255 255 / 18%);
   border-radius: 999px;
-  background: rgb(255 255 255 / 6%);
+  background: rgb(10 13 18 / 55%);
   color: var(--testo);
-  backdrop-filter: blur(10px);
-  animation: sali 700ms cubic-bezier(0.16, 1, 0.3, 1) 560ms both;
+  font-size: 13px;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
 }
 
-@keyframes sali {
-  from { opacity: 0; transform: translateY(26px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* --- Il carosello delle tappe ---------------------------------------------- */
+
+/*
+ * La fascia in fondo alla mappa: la data a sinistra, le copertine in fila.
+ *
+ * È una fascia piena e non una sfumatura, ed è la differenza fra "una barra" e "roba che
+ * galleggia sulla mappa". Prima le schede finivano tagliate dal bordo dello schermo e la
+ * colonna della data ci passava sopra: qui la fila ha il suo spazio, e non ne esce.
+ */
+.deck {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
+  padding: 14px 0 calc(env(safe-area-inset-bottom) + 14px) 16px;
+  background: linear-gradient(to top, rgb(6 9 13 / 96%) 72%, rgb(6 9 13 / 74%));
+  backdrop-filter: blur(18px);
+  border-top: 1px solid rgb(255 255 255 / 8%);
 }
 
-@keyframes traccia {
-  from { transform: scaleX(0); }
-  to   { transform: scaleX(1); }
-}
-
-/* --- Invito a scorrere ----------------------------------------------------- */
-
-.cue {
-  position: relative;
+/* La colonna della data: icona sopra, giorno, anno. Larghezza fissa, così le copertine
+   partono sempre dalla stessa riga verticale invece di ballare a ogni tappa. */
+.deck__when {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
+  width: 46px;
   color: var(--tenue);
   font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  animation: sali 700ms ease 900ms both;
-  transition: opacity 400ms ease;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.deck__mark {
+  display: block;
+  width: 19px;
+  height: 19px;
+  margin-bottom: 5px;
+  color: var(--pin);
+}
+
+.deck__mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.deck__day {
+  color: var(--testo);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.deck__year {
+  color: var(--fioco);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.deck__rail {
+  display: flex;
+  gap: 10px;
+  /*
+   * Lo spazio in coda serve a portare l'ultima tappa a sinistra come tutte le altre:
+   * senza, resterebbe inchiodata al bordo destro e non diventerebbe mai corrente.
+   *
+   * Esattamente `larghezza della fila meno una scheda`, e non un dito di più. Con un
+   * valore generoso (era 42vw) si poteva scorrere ben oltre l'ultima tappa, che restava
+   * sola in mezzo al nero; poi l'allineamento la strattonava indietro, e quello strattone
+   * è tutto ciò che si vedeva. Così il fondo corsa coincide con l'ultima tappa allineata,
+   * e non c'è più niente da correggere.
+   */
+  padding-right: calc(100% - 112px);
+  overflow-x: auto;
+  /* Col mouse il trascinamento lo gestisce stop-deck.ts: qui si toglie solo la selezione
+     del testo, che altrimenti parte a ogni strisciata. */
+  user-select: none;
+  scrollbar-width: none;
+}
+
+.deck__rail::-webkit-scrollbar {
+  display: none;
+}
+
+.deck__card {
+  position: relative;
+  flex: none;
+  width: 112px;
+  aspect-ratio: 4 / 5;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--superficie);
+  text-align: left;
+  /* Le non scelte stanno indietro: meno luminose e appena più piccole. È l'unico modo
+     per dire "sei qui" senza scriverlo. */
+  opacity: 0.42;
+  transform: scale(0.92);
+  transition:
+    opacity var(--entra) ease,
+    transform var(--entra) var(--molla),
+    box-shadow var(--entra) ease;
+}
+
+.deck__card--current {
+  opacity: 1;
+  transform: scale(1);
+  box-shadow: 0 6px 22px rgb(0 0 0 / 55%);
+}
+
+.deck__card:active {
+  transform: scale(0.97);
+}
+
+.deck__cover {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transform: scale(1.06);
+  transition: opacity 600ms ease, transform 900ms var(--molla);
+}
+
+.deck__cover--loaded {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* La sfumatura sotto il nome: le copertine sono foto vere, e su una spiaggia bianca il
+   testo bianco sparisce. */
+.deck__label {
+  position: absolute;
+  inset: auto 0 0;
+  display: grid;
+  gap: 1px;
+  padding: 22px 10px 9px;
+  background: linear-gradient(to top, rgb(6 9 13 / 92%), rgb(6 9 13 / 0%));
+}
+
+.deck__name {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 70%);
+}
+
+.deck__meta {
+  font-size: 11px;
+  color: rgb(255 255 255 / 58%);
+}
+
+/* Un filo col colore dell'accento sulla scheda scelta: dice quale comanda la mappa. */
+.deck__card--current .deck__label::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10px;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--pin);
+}
+
+/* --- Le foto di una tappa -------------------------------------------------- */
+
+/*
+ * Si apre toccando la scheda corrente e copre la mappa. È l'unico posto dove si sfoglia:
+ * la schermata principale serve a scegliere dove, questa a guardare cosa.
+ */
+.shelf {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--sfondo);
+  animation: sale-scaffale 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /*
- * `animation: none` non è di troppo: l'animazione di entrata usa fill-mode `both`, che
- * inchioda opacity a 1 anche dopo la fine e vince su qualsiasi regola dichiarata qui.
- * Senza toglierla, l'invito resta sullo schermo per sempre.
+ * Necessario, non ridondante: `overflow` e `animation` qui sopra battono l'attributo
+ * `hidden` del browser. È il quarto inciampo della stessa famiglia in questo progetto —
+ * il visore, l'invito a scorrere, il sipario, e ora questa.
  */
-.cue--gone {
-  animation: none;
-  opacity: 0;
-  pointer-events: none;
+.shelf[hidden] {
+  display: none;
 }
 
-.cue__arrow {
+@keyframes sale-scaffale {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shelf {
+    animation-duration: 1ms;
+  }
+}
+
+/* La tinta presa dalle foto: il mare fa ciano, il tramonto arancio. */
+.shelf::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 340px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, var(--tinta, transparent), transparent);
+}
+
+.shelf__bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 14px;
+  background: linear-gradient(to bottom, var(--sfondo) 72%, rgb(10 13 18 / 0%));
+}
+
+.shelf__back {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--bordo);
+  border-radius: 50%;
+  background: var(--superficie);
+  color: var(--testo);
   font-size: 20px;
   line-height: 1;
-  animation: rimbalza 1.8s ease-in-out infinite;
 }
 
-@keyframes rimbalza {
-  0%, 100% { transform: translateY(0); opacity: 0.5; }
-  50%      { transform: translateY(6px); opacity: 1; }
+.shelf__texts {
+  min-width: 0;
+}
+
+.shelf__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.shelf__meta {
+  margin: 2px 0 0;
+  color: var(--fioco);
+  font-size: 12px;
 }
 
 /* --- Griglia --------------------------------------------------------------- */
 
-/* Fondo pieno: da qui in giù la mappa non deve più trasparire dietro le foto. */
 .gallery {
   position: relative;
-  background: var(--sfondo);
-  padding: 4px 8px 24px;
+  max-width: var(--colonna);
+  margin: 0 auto;
+  padding: 0 12px;
 }
 
+/*
+ * `clamp` invece di una misura fissa: su un telefono servono riquadri da un terzo di
+ * schermo, su un portatile riquadri da 200px. Con `minmax(110px, 1fr)` fisso, su desktop
+ * uscivano venti colonne di francobolli.
+ */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(100px, 29vw, 190px), 1fr));
+  gap: 6px;
 }
 
 .tile {
@@ -262,12 +493,17 @@ button {
   padding: 0;
   border: 0;
   overflow: hidden;
-  border-radius: 6px;
-  background: #131a22;
+  border-radius: var(--r-s);
+  background: var(--superficie);
   /* Quadrati: la griglia resta compatta con foto verticali e orizzontali mescolate, e
      l'altezza è nota prima che le miniature arrivino, quindi la pagina non balla
      sotto il dito mentre si scorre. */
   aspect-ratio: 1;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tile:active {
+  transform: scale(0.97);
 }
 
 .tile img {
@@ -276,11 +512,33 @@ button {
   object-fit: cover;
   display: block;
   opacity: 0;
-  transition: opacity 240ms ease;
+  transition: opacity 300ms ease;
 }
 
 .tile--loaded img {
   opacity: 1;
+}
+
+/* Il riquadro vuoto respira mentre la miniatura viene scaricata e decifrata: senza,
+   una griglia lunga sembra semplicemente rotta. */
+.tile:not(.tile--loaded):not(.tile--broken)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 5%) 50%, transparent 80%);
+  background-size: 220% 100%;
+  animation: scorre 1.6s ease-in-out infinite;
+}
+
+@keyframes scorre {
+  from { background-position: 140% 0; }
+  to   { background-position: -40% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tile:not(.tile--loaded)::after {
+    animation: none;
+  }
 }
 
 .tile--broken::after {
@@ -289,13 +547,16 @@ button {
   inset: 0;
   display: grid;
   place-items: center;
-  color: var(--tenue);
+  color: var(--fioco);
+  animation: none;
+  background: none;
 }
 
 .empty {
-  padding: 40px 18px;
-  color: var(--tenue);
-  text-align: center;
+  margin: 0;
+  padding: 28px 16px;
+  color: var(--fioco);
+  font-size: 14px;
 }
 
 /* --- Foto a schermo intero ------------------------------------------------- */
@@ -304,9 +565,9 @@ button {
   position: fixed;
   inset: 0;
   z-index: 10;
-  background: #000;
+  background: #05070a;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr;
 }
 
 /*
@@ -318,24 +579,43 @@ button {
   display: none;
 }
 
+/* Una barra sola, in alto: contatore al centro, chiusura a sinistra, cancellazione a
+   destra. Prima il contatore galleggiava da solo in mezzo al nero. */
 .viewer__bar {
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 10px) 12px 10px;
+  padding: calc(env(safe-area-inset-top) + 12px) 14px 12px;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 70%), transparent);
 }
 
 .viewer__close,
 .viewer__action {
   padding: 8px 14px;
-  border: 1px solid #2a3542;
+  border: 0;
   border-radius: 999px;
-  background: rgb(255 255 255 / 6%);
+  background: rgb(255 255 255 / 10%);
   color: var(--testo);
+  font-size: 14px;
+  backdrop-filter: blur(8px);
 }
 
+/* Rosso solo dopo il primo tocco, quando il pulsante chiede conferma: prima era acceso
+   sempre, e un comando distruttivo che urla a riposo è solo rumore. */
 .viewer__action--danger {
-  margin-left: auto;
+  color: var(--tenue);
+}
+
+.viewer__action--danger[data-armed='si'] {
+  background: rgb(255 107 107 / 16%);
   color: var(--pericolo);
+}
+
+.viewer__caption {
+  margin: 0 auto;
+  color: var(--tenue);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .viewer__image {
@@ -343,58 +623,82 @@ button {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  transition: opacity 200ms ease;
 }
 
 .viewer__image.is-loading {
-  opacity: 0.3;
+  opacity: 0.25;
 }
 
-.viewer__caption {
-  margin: 0;
-  padding: 10px;
-  text-align: center;
-  color: var(--tenue);
-  font-size: 13px;
-}
-
+/*
+ * Le frecce stanno ai lati, verticalmente al centro, e solo dove servono davvero.
+ * Su un telefono si scorre col dito: due cerchi da 52px in fondo allo schermo erano
+ * ingombro puro. Compaiono da 700px in su, cioè quando c'è un mouse.
+ */
 .viewer__nav {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 12px calc(env(safe-area-inset-bottom) + 14px);
+  display: none;
 }
 
-.viewer__arrow {
-  width: 52px;
-  height: 52px;
-  border: 0;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 8%);
-  color: var(--testo);
-  font-size: 26px;
+@media (min-width: 700px) {
+  .viewer__nav {
+    display: flex;
+    justify-content: space-between;
+    position: absolute;
+    inset: 0 16px;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  .viewer__arrow {
+    pointer-events: auto;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 8%);
+    color: var(--testo);
+    font-size: 22px;
+    backdrop-filter: blur(8px);
+    transition: background 160ms ease;
+  }
+
+  .viewer__arrow:hover {
+    background: rgb(255 255 255 / 16%);
+  }
 }
 
 /* --- Caricamento ----------------------------------------------------------- */
 
+/*
+ * Un pulsante discreto allineato alla griglia, non un rettangolo tratteggiato grande
+ * quanto le foto. Chi carica sa già cosa sta cercando; chi guarda non deve inciamparci.
+ */
 .uploader {
   position: relative;
   z-index: 1;
-  padding: 18px 18px calc(env(safe-area-inset-bottom) + 28px);
-  background: var(--sfondo);
-  text-align: center;
+  padding: 14px 16px 34px;
 }
 
 .uploader__trigger {
-  width: 100%;
-  padding: 16px;
-  border: 1px dashed #2b3846;
-  border-radius: var(--raggio);
-  background: transparent;
-  color: var(--accento);
-  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border: 1px solid var(--bordo);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--testo);
+  font-size: 14px;
+  transition: border-color 160ms ease;
+}
+
+.uploader__trigger:hover {
+  border-color: var(--accento);
 }
 
 .uploader__bar {
-  height: 3px;
+  height: 2px;
+  max-width: 260px;
   margin: 14px 0 8px;
   border-radius: 2px;
   background: var(--bordo);
@@ -412,134 +716,780 @@ button {
   height: 100%;
   width: var(--progress, 0%);
   border-radius: 2px;
-  background: var(--accento);
+  background: var(--pin);
   transition: width 240ms ease;
 }
 
 .uploader__status {
-  margin: 0;
-  color: var(--tenue);
+  margin: 8px 0 0;
+  color: var(--fioco);
   font-size: 13px;
   min-height: 18px;
 }
 
-.uploader__retry {
+/*
+ * "Ferma" e "Riprova le foto fallite": stessa forma, perché sono la stessa cosa — la
+ * seconda mossa possibile mentre la prima è in corso o è appena finita male. Non sono
+ * mai visibili insieme.
+ *
+ * Niente rosso su "Ferma": fermare un caricamento non distrugge niente, le foto già
+ * arrivate restano. Il rosso in questo progetto serve a una cosa sola.
+ */
+.uploader__secondary {
   margin-top: 10px;
-  padding: 10px 16px;
+  padding: 9px 16px;
   border: 1px solid var(--bordo);
   border-radius: 999px;
   background: transparent;
   color: var(--testo);
+  font-size: 14px;
 }
 
-/* --- Pagina master --------------------------------------------------------- */
+/* Le foto che non ce l'hanno fatta, con il loro motivo: un conteggio non basta a sapere
+   quali riscegliere. */
+.uploader__failed {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--fioco);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.uploader__failed li {
+  overflow-wrap: anywhere;
+}
+
+/* --- L'indice dei viaggi --------------------------------------------------- */
+
+/*
+ * L'unica pagina chiara del sito, ed è una scelta, non una svista.
+ *
+ * Ovunque altro il fondo è nero perché comandano le foto sullo schermo. Qui invece si
+ * amministra: si legge un elenco, si copia un indirizzo di 120 caratteri, si controlla di
+ * aver esportato le chiavi. Tutto questo, su fondo chiaro, si fa meglio.
+ *
+ * Il resto della composizione non cambia: comandano le foto. Niente riquadri con bordi,
+ * niente moduli aperti, niente pulsanti colorati — lo spazio e le immagini fanno la
+ * gerarchia. Dietro, la copertina del viaggio più recente, ingrandita e sfocata.
+ */
+.master,
+.menu__drawer {
+  --p-fondo: #eceef1;
+  --p-superficie: #fff;
+  --p-testo: #10151c;
+  --p-tenue: #4d5764;
+  --p-fioco: #7c8794;
+  --p-bordo: #d7dce3;
+
+  background: var(--p-fondo);
+  color: var(--p-testo);
+  color-scheme: light;
+}
 
 .master {
   position: relative;
   z-index: 1;
-  max-width: 560px;
+  min-height: 100svh;
+  padding: 44px 20px calc(env(safe-area-inset-bottom) + 72px);
+}
+
+.panel {
+  position: relative;
+  max-width: 760px;
   margin: 0 auto;
-  padding: 32px 18px 64px;
 }
 
-.master__warning {
-  padding: 12px 14px;
-  border-radius: var(--raggio);
-  background: #141b23;
-  color: var(--tenue);
-  font-size: 14px;
+/*
+ * La copertina del primo viaggio, ingrandita e sfocata dietro tutto.
+ *
+ * Fissa e non scorrevole: scorrendo, un'immagine sfocata che si muove diventa rumore. Il
+ * velo chiaro sopra è quello che tiene il testo leggibile qualunque foto ci sia sotto —
+ * senza, su una spiaggia bianca sparisce tutto.
+ */
+.panel__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--p-fondo) center / cover no-repeat;
+  opacity: 0;
+  transform: scale(1.1);
+  filter: blur(60px) saturate(140%);
+  transition: opacity 900ms ease;
 }
 
-.master__warning--urgent {
-  background: #2a1a1a;
-  color: #ffbcbc;
+.panel__backdrop--loaded {
+  opacity: 0.5;
 }
 
-.master__form {
-  display: grid;
-  gap: 12px;
-  margin: 20px 0;
+.panel__backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgb(236 238 241 / 72%), rgb(236 238 241 / 92%));
 }
 
-.field {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--tenue);
+.panel__head {
+  margin-bottom: 10px;
 }
 
-.field input {
-  padding: 12px;
-  border: 1px solid var(--bordo);
-  border-radius: 8px;
-  background: #101821;
-  color: var(--testo);
-  font-size: 16px; /* sotto i 16px iOS zooma da solo sul campo */
-}
-
-.master__find,
-.master__create,
-.master__export {
-  padding: 12px 16px;
-  border: 1px solid var(--bordo);
-  border-radius: 8px;
-  background: #101821;
-  color: var(--testo);
-}
-
-.master__create {
-  background: var(--accento);
-  border-color: var(--accento);
-  color: #04121f;
-  font-weight: 600;
-}
-
-.master__error {
+.panel h1 {
   margin: 0;
-  color: var(--pericolo);
+  font-size: clamp(32px, 10vw, 46px);
+  letter-spacing: -0.04em;
+}
+
+.panel__count {
+  margin: 8px 0 0;
+  color: var(--p-fioco);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Una riga, non un riquadro: l'avviso sulle chiavi conta ma non è il contenuto. */
+.panel__keys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 30px;
+  color: var(--p-fioco);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.panel__keys--urgent {
+  color: #a3352f;
+}
+
+/*
+ * I pulsanti, tutti da qui.
+ *
+ * Tre varianti e basta: `primary` per l'unica azione principale di una schermata, `ghost`
+ * per tutto il resto, `danger` per quello che distrugge. La versione precedente aveva sei
+ * modi diversi di fare un pulsante, e bastava aggiungerne uno per rompere il ritmo.
+ *
+ * L'altezza minima è 44px anche quando il testo è piccolo: sotto quella misura un dito
+ * sbaglia, e questa pagina si usa dal telefono.
+ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background var(--esce) ease,
+    border-color var(--esce) ease,
+    color var(--esce) ease,
+    transform var(--esce) var(--uscita);
+}
+
+/* La pressione schiaccia il pulsante senza spostare niente intorno: `scale` non tocca il
+   layout, `padding` o `margin` lo farebbero ballare. */
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
+.btn--primary {
+  background: var(--p-testo);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: #26313f;
+}
+
+.btn--done {
+  background: #1d7a4f;
+}
+
+.btn--ghost {
+  background: rgb(16 21 28 / 5%);
+  color: var(--p-testo);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: rgb(16 21 28 / 9%);
+}
+
+.btn--danger {
+  background: none;
+  color: var(--p-fioco);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: rgb(163 53 47 / 10%);
+  color: #a3352f;
+}
+
+.btn--tiny {
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+
+.errore {
+  margin: 0;
+  color: #a3352f;
   font-size: 13px;
 }
 
-.master__result {
-  padding: 16px;
-  margin: 16px 0;
-  border: 1px solid var(--bordo);
-  border-radius: var(--raggio);
-  background: #101821;
+.errore:empty {
+  display: none;
 }
 
-.master__url {
+/* L'indirizzo del tag: monospazio nudo, senza cornice, con la sua riga di comando. */
+.address {
+  margin: 0 0 30px;
+  animation: sali 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.address[hidden] {
+  display: none;
+}
+
+.address__title {
+  margin: 0 0 8px;
+  color: var(--p-tenue);
+  font-size: 13px;
+}
+
+.address__url {
   display: block;
-  margin: 10px 0;
-  padding: 10px;
-  border-radius: 8px;
-  background: #0a1017;
-  color: var(--accento);
-  font-size: 12px;
+  margin-bottom: 8px;
+  color: #0f6d8c;
+  font-size: 11.5px;
+  line-height: 1.6;
   word-break: break-all;
 }
 
-.master__list {
+/* --- Le schede dei viaggi -------------------------------------------------- */
+
+.panel__trips {
+  display: grid;
+  gap: 40px;
   list-style: none;
   padding: 0;
-  margin: 24px 0 0;
+  margin: 0;
 }
 
-.master__list li {
+@media (min-width: 700px) {
+  .panel__trips {
+    grid-template-columns: 1fr 1fr;
+    gap: 36px 26px;
+  }
+}
+
+.trip {
+  position: relative;
+  list-style: none;
+  animation: sali 600ms cubic-bezier(0.16, 1, 0.3, 1) var(--ritardo, 0ms) both;
+}
+
+.trip__cover {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: var(--r-m);
+  background: #dfe3e8 center / cover no-repeat;
+  /* Ombra tinta col colore della foto, non nera: su fondo chiaro una nera sporca. */
+  box-shadow: 0 10px 30px -12px rgb(16 21 28 / 35%);
+  transition: transform 500ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 500ms ease;
+}
+
+.trip__cover--loaded {
+  animation: comparsa 800ms ease both;
+}
+
+/* La copertina si solleva appena quando ci passi sopra: è l'unico movimento che dice
+   "questa è una porta". */
+.trip__cover:hover {
+  transform: translateY(-3px) scale(1.008);
+  box-shadow: 0 18px 40px -14px rgb(16 21 28 / 45%);
+}
+
+.trip__cover:active {
+  transform: translateY(0) scale(0.996);
+}
+
+.trip__open {
+  position: absolute;
+  inset: 0;
+}
+
+.trip__label {
+  position: absolute;
+  inset: auto 0 0;
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--bordo);
+  gap: 10px;
+  padding: 44px 16px 14px;
+  background: linear-gradient(to top, rgb(4 7 10 / 82%), rgb(4 7 10 / 0%));
+  pointer-events: none;
 }
 
-.master__list a {
-  color: var(--testo);
+.trip__name {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  color: #fff;
+  text-shadow: 0 1px 10px rgb(0 0 0 / 55%);
 }
 
-.master__date {
-  color: var(--tenue);
+.trip__count {
+  flex: none;
+  color: rgb(255 255 255 / 68%);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 10px rgb(0 0 0 / 55%);
+}
+
+/* --- Le tappe, come anteprime ---------------------------------------------- */
+
+.stops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.stopchip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  background: var(--p-superficie);
+  box-shadow: 0 1px 3px rgb(16 21 28 / 10%);
+  list-style: none;
   font-size: 13px;
+  transition: box-shadow var(--esce) ease, transform var(--esce) var(--molla);
+  animation: sali var(--entra) var(--molla) var(--ritardo, 0ms) both;
+}
+
+.stopchip:hover {
+  transform: translateY(-1px);
+}
+
+.stopchip:hover {
+  box-shadow: 0 3px 10px rgb(16 21 28 / 16%);
+}
+
+.stopchip__thumb {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: #dfe3e8 center / cover no-repeat;
+}
+
+.stopchip__thumb--loaded {
+  animation: comparsa 500ms ease both;
+}
+
+.stopchip__name {
+  color: var(--p-testo);
+}
+
+/* La crocetta compare solo quando serve: a riposo la pastiglia è un'informazione, non un
+   comando. */
+.stopchip__remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--p-fioco);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 160ms ease, color 160ms ease;
+}
+
+.stopchip:hover .stopchip__remove,
+.stopchip__remove:focus-visible {
+  opacity: 1;
+}
+
+.stopchip__remove:hover {
+  color: #a3352f;
+}
+
+@media (hover: none) {
+  /* Senza puntatore non c'è nessun "sopra": la crocetta sta sempre lì. */
+  .stopchip__remove {
+    opacity: 0.6;
+  }
+}
+
+/*
+ * I comandi vanno a capo, e non è un dettaglio: quattro pulsanti in fila chiedono circa
+ * 500px, e su uno schermo più stretto uscivano dal bordo — "Elimina" diventava
+ * irraggiungibile, tagliato via dal contenitore che nasconde ciò che sborda.
+ *
+ * `margin-left: auto` sul distruttivo funziona solo finché la riga è una: con l'andata a
+ * capo spingerebbe "Elimina" da solo su una riga sua, lontano da tutto. Meglio lasciarlo
+ * in fila e distinguerlo col colore, che è quello che già fa.
+ */
+.trip__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.trip__missing {
+  margin: 12px 0 0;
+  color: var(--p-fioco);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* --- Il selettore di copertina --------------------------------------------- */
+
+/*
+ * Tutte le foto del viaggio in una fila che si scorre: si tocca quella che lo racconta.
+ * Le anteprime entrano una dopo l'altra, così si capisce che stanno arrivando invece di
+ * comparire tutte insieme come un blocco.
+ */
+.picker[hidden] {
+  display: none;
+}
+
+.picker {
+  margin-top: 14px;
+  animation: apri-pannello var(--entra) var(--molla) both;
+}
+
+.picker__title {
+  margin: 0 0 8px;
+  color: var(--p-fioco);
+  font-size: 12.5px;
+}
+
+.picker__rail {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.picker__shot {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #dfe3e8 center / cover no-repeat;
+  box-shadow: 0 1px 4px rgb(16 21 28 / 14%);
+  opacity: 0;
+  transform: scale(0.9);
+  transition: transform var(--esce) var(--molla), box-shadow var(--esce) ease;
+}
+
+.picker__shot--loaded {
+  animation: entra-anteprima var(--entra) var(--molla) var(--ritardo, 0ms) forwards;
+}
+
+.picker__shot:hover {
+  transform: scale(1.06);
+  box-shadow: 0 6px 16px rgb(16 21 28 / 26%);
+}
+
+.picker__shot:active {
+  transform: scale(0.98);
+}
+
+@keyframes entra-anteprima {
+  to { opacity: 1; transform: scale(1); }
+}
+
+.picker__empty {
+  margin: 0;
+  color: var(--p-fioco);
+  font-size: 13px;
+}
+
+@keyframes apri-pannello {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- I due moduli ---------------------------------------------------------- */
+
+.stopform[hidden],
+.newtrip__form[hidden],
+.newtrip__open[hidden] {
+  display: none;
+}
+
+.stopform,
+.newtrip__form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  animation: apri-pannello var(--entra) var(--molla) both;
+}
+
+/* Sotto i 380px il campo diventa troppo stretto per scriverci un nome: lì "Cerca" scende
+   sotto invece di schiacciarlo. */
+.stopform__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+@media (max-width: 380px) {
+  .stopform__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Nessuna riga di questa pagina può sfondare in orizzontale: quello che non ci sta va a
+   capo, e se proprio non può viene tagliato qui invece di allargare tutto il documento. */
+.panel {
+  overflow-x: clip;
+}
+
+.stopform__found {
+  margin: 0;
+  color: var(--p-fioco);
+  font-size: 12.5px;
+}
+
+.stopform__found:empty {
+  display: none;
+}
+
+.stopform__coord {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.stopform__coord[hidden] {
+  display: none;
+}
+
+/* --- Il viaggio nuovo ------------------------------------------------------ */
+
+/* Una lastra vuota della stessa forma delle copertine: si capisce cosa produce prima di
+   toccarla. */
+.newtrip {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  padding: 18px;
+  border-radius: var(--r-m);
+  background: rgb(255 255 255 / 55%);
+  box-shadow: inset 0 0 0 1px rgb(16 21 28 / 7%);
+  transition: background 200ms ease, box-shadow 200ms ease;
+}
+
+.newtrip:hover {
+  background: rgb(255 255 255 / 85%);
+  box-shadow: inset 0 0 0 1px rgb(37 150 190 / 35%);
+}
+
+.newtrip__open {
+  font-size: 15px;
+}
+
+.newtrip__form {
+  width: 100%;
+}
+
+/* --- Campi ----------------------------------------------------------------- */
+
+/*
+ * Sottolineati invece che dentro un riquadro: una pagina fatta di foto grandi non regge
+ * cinque rettangoli con il bordo, e la riga sotto basta a dire dove si scrive.
+ */
+.field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--p-fioco);
+}
+
+.field input {
+  min-width: 0;
+  padding: 9px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--p-bordo);
+  border-radius: 0;
+  background: none;
+  color: var(--p-testo);
+  font-size: 16px; /* sotto i 16px iOS zooma da solo sul campo */
+  transition: border-color 200ms ease;
+}
+
+.field input::placeholder {
+  color: #aab3bd;
+}
+
+.field input:focus {
+  border-bottom-color: var(--accento);
+  outline: none;
+}
+
+/* --- Il menu --------------------------------------------------------------- */
+
+.menu {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: 14px;
+  z-index: 6;
+}
+
+.menu__toggle {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 13px;
+  background: rgb(10 13 18 / 55%);
+  backdrop-filter: blur(14px);
+  transition:
+    background var(--esce) ease,
+    border-color var(--esce) ease,
+    transform var(--esce) var(--molla);
+}
+
+.menu__toggle:active {
+  transform: scale(0.94);
+}
+
+/* Le tre righe diventano una croce: dice che quel pulsante ora chiude, senza scriverlo. */
+.menu__bars {
+  position: relative;
+  display: block;
+  width: 16px;
+  height: 12px;
+}
+
+.menu__bars i {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 85%);
+  transition:
+    transform var(--entra) var(--molla),
+    opacity var(--esce) ease,
+    background var(--esce) ease;
+}
+
+.menu__bars i:nth-child(1) { top: 0; }
+.menu__bars i:nth-child(2) { top: 5.25px; }
+.menu__bars i:nth-child(3) { top: 10.5px; }
+
+.menu--open .menu__bars i:nth-child(1) { transform: translateY(5.25px) rotate(45deg); }
+.menu--open .menu__bars i:nth-child(2) { opacity: 0; transform: scaleX(0.4); }
+.menu--open .menu__bars i:nth-child(3) { transform: translateY(-5.25px) rotate(-45deg); }
+
+/* Sopra il cassetto chiaro il pulsante si inverte, o sparirebbe sul bianco. */
+.menu--open .menu__toggle {
+  border-color: rgb(16 21 28 / 12%);
+  background: rgb(255 255 255 / 86%);
+}
+
+.menu--open .menu__bars i {
+  background: #10151c;
+}
+
+/* Il velo: separa il cassetto dalla mappa e si chiude toccandolo. */
+.menu__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgb(4 7 10 / 55%);
+  opacity: 0;
+  transition: opacity var(--esce) ease;
+}
+
+.menu__scrim[hidden] {
+  display: none;
+}
+
+.menu__scrim--on {
+  opacity: 1;
+}
+
+/*
+ * Necessario, non ridondante: `display: block` e `animation` qui sotto batterebbero
+ * l'attributo `hidden` del browser. È lo stesso inciampo già costato quattro volte in
+ * questo progetto — il visore, l'invito a scorrere, il sipario, la galleria.
+ */
+.menu__drawer[hidden] {
+  display: none;
+}
+
+/*
+ * Il cassetto nasce dal ☰ e ci torna dentro: l'origine della trasformazione è l'angolo
+ * dove sta il pulsante, e questo lo fa leggere come "aperto da lì" invece che comparso
+ * al centro dello schermo.
+ */
+.menu__drawer {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  max-width: 100vw;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 72px 20px calc(env(safe-area-inset-bottom) + 28px);
+
+  opacity: 0;
+  transform: scale(0.94) translate(-8px, -10px);
+  transform-origin: 28px 28px;
+  transition:
+    opacity var(--esce) ease,
+    transform var(--esce) var(--uscita);
+}
+
+.menu__drawer--on {
+  opacity: 1;
+  transform: scale(1) translate(0, 0);
+  transition:
+    opacity var(--entra) ease,
+    transform var(--entra) var(--molla);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu__drawer,
+  .menu__drawer--on,
+  .menu__scrim,
+  .menu__bars i {
+    transition-duration: 1ms;
+  }
 }
 
 /* --- Messaggi -------------------------------------------------------------- */
@@ -547,15 +1497,19 @@ button {
 .message {
   position: relative;
   z-index: 1;
-  display: grid;
-  place-content: center;
-  gap: 8px;
-  min-height: 100vh;
-  padding: 24px;
-  text-align: center;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 22vh 24px;
+}
+
+.message h1 {
+  margin: 0 0 12px;
+  font-size: 26px;
+  letter-spacing: -0.02em;
 }
 
 .message p {
+  margin: 0;
   color: var(--tenue);
-  max-width: 34ch;
+  line-height: 1.6;
 }

@@ -7,11 +7,14 @@
  */
 
 import type {
-  CreatePlaceRequest,
-  CreatePlaceResponse,
-  PlaceDto,
+  CreateStopRequest,
+  CreateStopResponse,
+  CreateTripRequest,
+  CreateTripResponse,
   RegisterPhotoRequest,
   RegisterPhotoResponse,
+  TripSummaryDto,
+  TripDto,
   UploadMediaResponse,
 } from '../../shared/api-types';
 
@@ -32,9 +35,19 @@ async function parse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-/** Il posto con le sue foto. Non richiede token: senza chiave i riferimenti sono inerti. */
-export async function fetchPlace(slug: string): Promise<PlaceDto> {
-  return parse(await fetch(`/api/places/${slug}`));
+const asJson = (token: string) => ({
+  Authorization: `Bearer ${token}`,
+  'Content-Type': 'application/json',
+});
+
+// --- Lettura -----------------------------------------------------------------
+
+/**
+ * Il viaggio con tutte le sue tappe. Non richiede token: senza chiave i riferimenti alle
+ * foto sono inerti.
+ */
+export async function fetchTrip(tripSlug: string): Promise<TripDto> {
+  return parse(await fetch(`/api/trips/${tripSlug}`));
 }
 
 /** URL da cui scaricare un blob cifrato. */
@@ -48,8 +61,15 @@ export async function fetchEncrypted(key: string): Promise<ArrayBuffer> {
   return response.arrayBuffer();
 }
 
-export async function uploadMedia(slug: string, writeToken: string, blob: Blob, kind: 'full' | 'thumb'): Promise<string> {
-  const response = await fetch(`/api/places/${slug}/media`, {
+// --- Scrittura, col token del viaggio ----------------------------------------
+
+export async function uploadMedia(
+  stopSlug: string,
+  writeToken: string,
+  blob: Blob,
+  kind: 'full' | 'thumb',
+): Promise<string> {
+  const response = await fetch(`/api/stops/${stopSlug}/media`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${writeToken}`, 'X-Media-Kind': kind },
     body: blob,
@@ -59,44 +79,82 @@ export async function uploadMedia(slug: string, writeToken: string, blob: Blob, 
 }
 
 export async function registerPhoto(
-  slug: string,
+  stopSlug: string,
   writeToken: string,
   photo: RegisterPhotoRequest,
 ): Promise<RegisterPhotoResponse> {
   return parse(
-    await fetch(`/api/places/${slug}/photos`, {
+    await fetch(`/api/stops/${stopSlug}/photos`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${writeToken}`, 'Content-Type': 'application/json' },
+      headers: asJson(writeToken),
       body: JSON.stringify(photo),
     }),
   );
 }
 
-export async function setCover(slug: string, writeToken: string, photoId: string): Promise<void> {
+export async function deletePhoto(stopSlug: string, writeToken: string, photoId: string): Promise<void> {
   await parse(
-    await fetch(`/api/places/${slug}/cover`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${writeToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ photoId }),
-    }),
-  );
-}
-
-export async function deletePhoto(slug: string, writeToken: string, photoId: string): Promise<void> {
-  await parse(
-    await fetch(`/api/places/${slug}/photos/${photoId}`, {
+    await fetch(`/api/stops/${stopSlug}/photos/${photoId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${writeToken}` },
     }),
   );
 }
 
-export async function createPlace(masterToken: string, place: CreatePlaceRequest): Promise<CreatePlaceResponse> {
+// --- Creazione, col token master ---------------------------------------------
+
+export async function createTrip(masterToken: string, trip: CreateTripRequest): Promise<CreateTripResponse> {
   return parse(
-    await fetch('/api/places', {
+    await fetch('/api/trips', { method: 'POST', headers: asJson(masterToken), body: JSON.stringify(trip) }),
+  );
+}
+
+export async function fetchTrips(masterToken: string): Promise<TripSummaryDto[]> {
+  return parse(await fetch('/api/trips', { headers: { Authorization: `Bearer ${masterToken}` } }));
+}
+
+export async function createStop(
+  masterToken: string,
+  tripSlug: string,
+  stop: CreateStopRequest,
+): Promise<CreateStopResponse> {
+  return parse(
+    await fetch(`/api/trips/${tripSlug}/stops`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(place),
+      headers: asJson(masterToken),
+      body: JSON.stringify(stop),
+    }),
+  );
+}
+
+export async function setTripCover(
+  masterToken: string,
+  tripSlug: string,
+  photoId: string,
+): Promise<void> {
+  await parse(
+    await fetch(`/api/trips/${tripSlug}/cover`, {
+      method: 'PATCH',
+      headers: asJson(masterToken),
+      body: JSON.stringify({ photoId }),
+    }),
+  );
+}
+
+export async function deleteStop(masterToken: string, stopSlug: string): Promise<void> {
+  await parse(
+    await fetch(`/api/stops/${stopSlug}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${masterToken}` },
+    }),
+  );
+}
+
+export async function deleteTrip(masterToken: string, tripSlug: string): Promise<void> {
+  await parse(
+    await fetch(`/api/trips/${tripSlug}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${masterToken}` },
     }),
   );
 }

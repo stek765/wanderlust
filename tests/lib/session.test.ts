@@ -4,7 +4,9 @@ import {
   buildTagUrl,
   cleanedUrl,
   parseRoute,
+  recallMasterToken,
   recallWriteToken,
+  rememberMasterToken,
   resolveWriteToken,
 } from '../../src/lib/session';
 
@@ -37,10 +39,10 @@ class MemoryStorage implements Storage {
 
 describe('lettura dell\'URL', () => {
   it('riconosce un URL arrivato dal tag NFC', () => {
-    const route = parseRoute(`${ORIGIN}/p/bangkok12345?w=${TOKEN}#${KEY}`);
+    const route = parseRoute(`${ORIGIN}/v/bangkok12345?w=${TOKEN}#${KEY}`);
 
     expect(route).toEqual({
-      kind: 'place',
+      kind: 'trip',
       slug: 'bangkok12345',
       keyMaterial: KEY,
       writeTokenFromUrl: TOKEN,
@@ -48,19 +50,19 @@ describe('lettura dell\'URL', () => {
   });
 
   it('riconosce un link condiviso: chiave sì, potere di scrittura no', () => {
-    const route = parseRoute(`${ORIGIN}/p/bangkok12345#${KEY}`);
+    const route = parseRoute(`${ORIGIN}/v/bangkok12345#${KEY}`);
 
-    expect(route.kind).toBe('place');
-    if (route.kind !== 'place') return;
+    expect(route.kind).toBe('trip');
+    if (route.kind !== 'trip') return;
     expect(route.keyMaterial).toBe(KEY);
     expect(route.writeTokenFromUrl).toBeNull();
   });
 
   it('segnala un URL senza chiave invece di fingere che vada bene', () => {
-    const route = parseRoute(`${ORIGIN}/p/bangkok12345`);
+    const route = parseRoute(`${ORIGIN}/v/bangkok12345`);
 
-    expect(route.kind).toBe('place');
-    if (route.kind !== 'place') return;
+    expect(route.kind).toBe('trip');
+    if (route.kind !== 'trip') return;
     expect(route.keyMaterial).toBeNull();
   });
 
@@ -68,9 +70,9 @@ describe('lettura dell\'URL', () => {
     expect(parseRoute(`${ORIGIN}/m/segretissimo`)).toEqual({ kind: 'master', masterToken: 'segretissimo' });
   });
 
-  it('non scambia la home per un posto', () => {
+  it('non scambia la home per un viaggio', () => {
     expect(parseRoute(`${ORIGIN}/`).kind).toBe('unknown');
-    expect(parseRoute(`${ORIGIN}/p/`).kind).toBe('unknown');
+    expect(parseRoute(`${ORIGIN}/v/`).kind).toBe('unknown');
   });
 });
 
@@ -86,8 +88,8 @@ describe('condivisione', () => {
   it('chi riceve il link condiviso può leggere ma non scrivere', () => {
     const route = parseRoute(buildShareUrl(ORIGIN, 'bangkok12345', KEY));
 
-    expect(route.kind).toBe('place');
-    if (route.kind !== 'place') return;
+    expect(route.kind).toBe('trip');
+    if (route.kind !== 'trip') return;
     expect(route.keyMaterial).toBe(KEY);
     expect(route.writeTokenFromUrl).toBeNull();
   });
@@ -96,8 +98,8 @@ describe('condivisione', () => {
     const tagUrl = buildTagUrl(ORIGIN, 'bangkok12345', TOKEN, KEY);
     const route = parseRoute(tagUrl);
 
-    expect(route.kind).toBe('place');
-    if (route.kind !== 'place') return;
+    expect(route.kind).toBe('trip');
+    if (route.kind !== 'trip') return;
     expect(route.slug).toBe('bangkok12345');
     expect(route.writeTokenFromUrl).toBe(TOKEN);
     expect(route.keyMaterial).toBe(KEY);
@@ -112,18 +114,18 @@ describe('condivisione', () => {
 
 describe('pulizia della barra degli indirizzi', () => {
   it('toglie il token ma tiene la chiave', () => {
-    const cleaned = cleanedUrl(`${ORIGIN}/p/bangkok12345?w=${TOKEN}#${KEY}`);
+    const cleaned = cleanedUrl(`${ORIGIN}/v/bangkok12345?w=${TOKEN}#${KEY}`);
 
-    expect(cleaned).toBe(`/p/bangkok12345#${KEY}`);
+    expect(cleaned).toBe(`/v/bangkok12345#${KEY}`);
     expect(cleaned).not.toContain(TOKEN);
   });
 
   it('l\'URL ripulito resta leggibile: senza chiave non si potrebbe ricaricare', () => {
-    const cleaned = cleanedUrl(`${ORIGIN}/p/bangkok12345?w=${TOKEN}#${KEY}`);
+    const cleaned = cleanedUrl(`${ORIGIN}/v/bangkok12345?w=${TOKEN}#${KEY}`);
     const route = parseRoute(ORIGIN + cleaned);
 
-    expect(route.kind).toBe('place');
-    if (route.kind !== 'place') return;
+    expect(route.kind).toBe('trip');
+    if (route.kind !== 'trip') return;
     expect(route.keyMaterial).toBe(KEY);
   });
 });
@@ -135,39 +137,59 @@ describe('memoria del token di scrittura', () => {
   });
 
   it('il token arrivato dal tag viene messo da parte', () => {
-    const route = parseRoute(`${ORIGIN}/p/bangkok12345?w=${TOKEN}#${KEY}`);
-    if (route.kind !== 'place') throw new Error('rotta sbagliata');
+    const route = parseRoute(`${ORIGIN}/v/bangkok12345?w=${TOKEN}#${KEY}`);
+    if (route.kind !== 'trip') throw new Error('rotta sbagliata');
 
     expect(resolveWriteToken(storage, route)).toBe(TOKEN);
     expect(recallWriteToken(storage, 'bangkok12345')).toBe(TOKEN);
   });
 
   it('una visita successiva senza token lo ritrova', () => {
-    const dalTag = parseRoute(`${ORIGIN}/p/bangkok12345?w=${TOKEN}#${KEY}`);
-    if (dalTag.kind !== 'place') throw new Error('rotta sbagliata');
+    const dalTag = parseRoute(`${ORIGIN}/v/bangkok12345?w=${TOKEN}#${KEY}`);
+    if (dalTag.kind !== 'trip') throw new Error('rotta sbagliata');
     resolveWriteToken(storage, dalTag);
 
-    const daPreferito = parseRoute(`${ORIGIN}/p/bangkok12345#${KEY}`);
-    if (daPreferito.kind !== 'place') throw new Error('rotta sbagliata');
+    const daPreferito = parseRoute(`${ORIGIN}/v/bangkok12345#${KEY}`);
+    if (daPreferito.kind !== 'trip') throw new Error('rotta sbagliata');
 
     expect(resolveWriteToken(storage, daPreferito)).toBe(TOKEN);
   });
 
-  it('il token di un posto non vale per un altro', () => {
-    const route = parseRoute(`${ORIGIN}/p/bangkok12345?w=${TOKEN}#${KEY}`);
-    if (route.kind !== 'place') throw new Error('rotta sbagliata');
+  it('il token di un viaggio non vale per un altro', () => {
+    const route = parseRoute(`${ORIGIN}/v/bangkok12345?w=${TOKEN}#${KEY}`);
+    if (route.kind !== 'trip') throw new Error('rotta sbagliata');
     resolveWriteToken(storage, route);
 
-    const altro = parseRoute(`${ORIGIN}/p/lisbona67890#${KEY}`);
-    if (altro.kind !== 'place') throw new Error('rotta sbagliata');
+    const altro = parseRoute(`${ORIGIN}/v/lisbona67890#${KEY}`);
+    if (altro.kind !== 'trip') throw new Error('rotta sbagliata');
 
     expect(resolveWriteToken(storage, altro)).toBeNull();
   });
 
   it('chi apre un link condiviso su un telefono nuovo resta in sola lettura', () => {
     const route = parseRoute(buildShareUrl(ORIGIN, 'bangkok12345', KEY));
-    if (route.kind !== 'place') throw new Error('rotta sbagliata');
+    if (route.kind !== 'trip') throw new Error('rotta sbagliata');
 
     expect(resolveWriteToken(storage, route)).toBeNull();
+  });
+});
+
+describe('memoria del token master', () => {
+  it('parte senza niente', () => {
+    expect(recallMasterToken(new MemoryStorage())).toBeNull();
+  });
+
+  it('una visita alla pagina master lo lascia su questo browser', () => {
+    const storage = new MemoryStorage();
+    rememberMasterToken(storage, 'segretissimo');
+
+    expect(recallMasterToken(storage)).toBe('segretissimo');
+  });
+
+  it('non finisce nella stessa casella dei token di scrittura', () => {
+    const storage = new MemoryStorage();
+    rememberMasterToken(storage, 'segretissimo');
+
+    expect(recallWriteToken(storage, 'segretissimo')).toBeNull();
   });
 });

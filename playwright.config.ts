@@ -11,6 +11,14 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: false, // un solo database locale condiviso
   workers: 1,
+  /*
+   * Un ritentativo, e solo per un motivo: il test marcato [WEBGL] gira su swiftshader,
+   * cioè WebGL emulato via software, che sotto il carico degli altri quindici test ogni
+   * tanto non riesce a inizializzare il contesto. Quando succede MapScene non parte e la
+   * fascia non compare — comportamento corretto del prodotto, ambiente inaffidabile.
+   * Visto fallire una volta su tre corse complete, mai da solo.
+   */
+  retries: 1,
   reporter: [['list']],
 
   use: {
@@ -22,17 +30,25 @@ export default defineConfig({
     {
       // Il dispositivo su cui questa cosa verrà davvero usata.
       name: 'safari-iphone',
+      // Tutto tranne i test che pretendono WebGL: WebKit headless non ce l'ha, quindi lì
+      // la mappa non parte proprio e la fascia non esiste. È il comportamento voluto, non
+      // un guasto — vedi la regola sul contenuto che non dipende dalla messa in scena.
+      grepInvert: /\[WEBGL\]/,
       use: { ...devices['iPhone 13'] },
     },
     {
       /*
-       * Solo i test marcati [HEIC], e c'è un motivo preciso: Safari l'HEIC lo decodifica
-       * da solo, quindi su WebKit il convertitore non verrebbe mai esercitato e un suo
-       * guasto passerebbe inosservato. Chrome invece l'HEIC non lo sa leggere: è qui che
-       * la conversione o funziona o si vede.
+       * Due famiglie di test girano qui e non su Safari.
+       *
+       * [HEIC]: Safari l'HEIC lo decodifica da solo, quindi su WebKit il convertitore non
+       * verrebbe mai esercitato e un suo guasto passerebbe inosservato. Chrome invece
+       * l'HEIC non lo sa leggere: è qui che la conversione o funziona o si vede.
+       *
+       * [WEBGL]: WebKit headless non ha WebGL, quindi la mappa non parte proprio e la
+       * fascia non esiste. Chrome con swiftshader ce l'ha, seppure via software.
        */
       name: 'chrome-desktop',
-      grep: /\[HEIC\]/,
+      grep: /\[HEIC\]|\[WEBGL\]/,
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: { args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] },
@@ -41,7 +57,16 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm run dev',
+    /*
+     * Porta esplicita e database separato, e non `npm run dev`. Due difetti in una riga:
+     *
+     * - wrangler sceglie 8787 e slitta alla prima libera se è occupata, quindi con un
+     *   server di sviluppo già aperto a mano i test finivano sulla porta sbagliata;
+     * - senza `--persist-to`, D1 e R2 emulati sono gli STESSI dello sviluppo, e ogni
+     *   corsa lasciava quindici viaggi di prova dentro il database vero. Succedeva
+     *   davvero, e sono stati trovati a mano.
+     */
+    command: 'npm run dev:prove',
     // La radice risponde 200 con il guscio HTML: è l'unica rotta che dice "sono su"
     // senza dipendere da dati nel database.
     url: 'http://127.0.0.1:8788/',

@@ -25,7 +25,7 @@ class MemoryStorage implements Storage {
 
 const entry = (slug: string, createdAt = 1000): KeychainEntry => ({
   slug,
-  name: `Posto ${slug}`,
+  name: `Viaggio ${slug}`,
   key: 'chiave-in-base64url',
   writeToken: 'token-di-scrittura',
   createdAt,
@@ -48,7 +48,7 @@ describe('portachiavi', () => {
     expect(loadKeychain(storage).map((e) => e.slug)).toEqual(['bangkok', 'lisbona']);
   });
 
-  it('non duplica lo stesso posto', () => {
+  it('non duplica lo stesso viaggio', () => {
     addToKeychain(storage, entry('bangkok', 1000));
     addToKeychain(storage, { ...entry('bangkok', 2000), name: 'Bangkok davvero' });
 
@@ -77,12 +77,12 @@ describe('esportazione', () => {
     const testo = await exportKeychain([entry('bangkok')]).text();
     const parsed = JSON.parse(testo);
 
-    expect(parsed.posti[0].key).toBe('chiave-in-base64url');
-    expect(parsed.posti[0].writeToken).toBe('token-di-scrittura');
+    expect(parsed.viaggi[0].key).toBe('chiave-in-base64url');
+    expect(parsed.viaggi[0].writeToken).toBe('token-di-scrittura');
     expect(parsed.avviso).toMatch(/perse per sempre/);
   });
 
-  it('avverte finché c\'è un posto nuovo non esportato', () => {
+  it('avverte finché c\'è un viaggio nuovo non esportato', () => {
     const entries = [entry('bangkok', 1000)];
 
     expect(needsExport(entries, null)).toBe(true);

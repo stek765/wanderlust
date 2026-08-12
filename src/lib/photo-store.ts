@@ -61,6 +61,20 @@ export class PhotoStore {
     await Promise.all(workers);
   }
 
+  /**
+   * Prende in carico una miniatura che abbiamo già in chiaro, senza passare dalla rete.
+   *
+   * Serve al caricamento: la miniatura appena spedita ce l'abbiamo ancora fra le mani, e
+   * senza questo metodo la griglia la richiederebbe a R2 e la ridecifrerebbe per mostrare
+   * una cosa che non ha mai lasciato il telefono. Con trenta foto sono trenta andate e
+   * ritorni inutili, ed è anche il motivo per cui la foto appena caricata compariva in
+   * ritardo invece che subito.
+   */
+  adopt(mediaKey: string, plain: Blob): void {
+    if (this.urls.has(mediaKey)) return;
+    this.urls.set(mediaKey, URL.createObjectURL(plain));
+  }
+
   has(mediaKey: string): boolean {
     return this.urls.has(mediaKey);
   }

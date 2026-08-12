@@ -27,6 +27,8 @@ export interface UploadProgress {
   done: number;
   failed: number;
   total: number;
+  /** Vero se qualcuno ha fermato la coda: le foto rimaste in attesa ci restano. */
+  cancelled: boolean;
 }
 
 /** Cosa fare con una singola foto. Isolato così la coda resta testabile senza rete. */
@@ -44,6 +46,7 @@ export class UploadQueue {
   private readonly items: QueueItem[] = [];
   private nextIndex = 0;
   private running = false;
+  private cancelled = false;
 
   constructor(
     private readonly uploadOne: UploadOne,
@@ -51,6 +54,9 @@ export class UploadQueue {
   ) {}
 
   add(files: File[]): void {
+    // Scegliere altre foto è una richiesta nuova: se la coda era stata fermata, riparte.
+    this.cancelled = false;
+
     for (const file of files) {
       this.items.push({
         id: `${file.name}:${file.size}:${this.items.length}`,
@@ -68,11 +74,27 @@ export class UploadQueue {
       done: this.items.filter((i) => i.status === 'fatto').length,
       failed: this.items.filter((i) => i.status === 'fallito').length,
       total: this.items.length,
+      cancelled: this.cancelled,
     };
+  }
+
+  /**
+   * Ferma la coda: da qui in poi non parte più niente.
+   *
+   * Quello che è già in volo arriva comunque — una richiesta HTTP a metà non si richiama
+   * indietro, e fingere il contrario significherebbe dire "annullato" a una foto che nel
+   * frattempo si sta salvando. Le foto ancora in attesa restano in attesa, non diventano
+   * fallite: non sono andate male, semplicemente non sono partite.
+   */
+  cancel(): void {
+    this.cancelled = true;
+    this.report();
   }
 
   /** Rimette in coda le foto fallite. Solo quelle: le altre sono già a posto. */
   retryFailed(): void {
+    this.cancelled = false;
+
     for (const item of this.items) {
       if (item.status === 'fallito') {
         item.status = 'attesa';
@@ -114,6 +136,11 @@ export class UploadQueue {
   private async attempt(item: QueueItem): Promise<void> {
     while (item.attempts < MAX_ATTEMPTS) {
       await this.waitForNetwork();
+      // Fermata mentre aspettava la rete, o fra un tentativo e l'altro: torna in attesa.
+      if (this.cancelled) {
+        item.status = 'attesa';
+        return;
+      }
       item.attempts++;
 
       try {
@@ -139,7 +166,9 @@ export class UploadQueue {
    */
   private async waitForNetwork(): Promise<void> {
     const isOnline = this.options.isOnline ?? (() => navigator.onLine);
-    while (!isOnline()) {
+    // La fermata va guardata anche qui, o una coda ferma senza rete aspetterebbe per sempre
+    // un ritorno che a nessuno interessa più.
+    while (!isOnline() && !this.cancelled) {
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
@@ -150,6 +179,8 @@ export class UploadQueue {
   }
 
   private takeNext(): QueueItem | undefined {
+    if (this.cancelled) return undefined;
+
     while (this.nextIndex < this.items.length) {
       const item = this.items[this.nextIndex++];
       if (item && item.status === 'attesa') return item;

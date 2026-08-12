@@ -12,7 +12,9 @@
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote",
     "deploy": "vite build && wrangler deploy",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "db:prove": "wrangler d1 migrations apply DB --local --persist-to .wrangler/prove",
+    "dev:prove": "vite build && wrangler dev --port 8788 --persist-to .wrangler/prove"
   },
   "dependencies": {
     "exifr": "^7.1.3",

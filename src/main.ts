@@ -1,13 +1,13 @@
 /**
  * Punto d'ingresso. Guarda l'URL e decide che pagina è.
  *
- * Non c'è una home, ed è voluto: non esiste nessun posto da cui si possa risalire
- * all'elenco dei ricordi. Ogni magnete apre il suo, e nient'altro.
+ * Non c'è una home, ed è voluto: non esiste nessun indirizzo pubblico da cui si possa
+ * risalire ai ricordi. Ogni magnete apre il suo viaggio, e nient'altro.
  */
 
 import './styles.css';
 import { renderMasterPage } from './pages/master';
-import { renderPlacePage } from './pages/place';
+import { renderTripPage } from './pages/trip';
 import { parseRoute } from './lib/session';
 
 const root = document.querySelector<HTMLElement>('#app');
@@ -16,8 +16,8 @@ if (!root) throw new Error('#app mancante nel documento');
 const route = parseRoute(location.href);
 
 switch (route.kind) {
-  case 'place':
-    void renderPlacePage(root, route);
+  case 'trip':
+    void renderTripPage(root, route);
     break;
 
   case 'master':

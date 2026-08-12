@@ -11,6 +11,19 @@
 
     <title>Ricordi</title>
 
+    <!--
+      Le mappe stanno su un altro dominio, quindi prima del primo tassello il telefono
+      deve fare DNS, TCP e TLS da capo — mezzo secondo su rete mobile, speso in un momento
+      in cui non sta ancora scaricando niente di utile. Aprire le connessioni adesso
+      sposta quel costo dentro il tempo in cui il browser sta già leggendo il sito.
+
+      Due host e non uno: il primo serve solo lo stile, il secondo glifi, sprite e tasselli
+      — cioè quasi tutto. `crossorigin` perché MapLibre li chiede in CORS, e senza
+      l'attributo si aprirebbe una connessione che poi non verrebbe riusata.
+    -->
+    <link rel="preconnect" href="https://tiles.basemaps.cartocdn.com" crossorigin />
+    <link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin />
+
     <!-- Installabile sulla home come una app, pur restando un sito. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="theme-color" content="#0b0f14" />

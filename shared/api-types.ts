@@ -19,25 +19,65 @@ export interface PhotoDto {
   sortIndex: number;
 }
 
-export interface PlaceDto {
+/** Una tappa: un magnete, un punto sulla mappa, un gruppo di foto. */
+export interface StopDto {
   slug: string;
   name: string;
   lat: number;
   lon: number;
-  coverPhotoId: string | null;
   photos: PhotoDto[];
 }
 
-export interface CreatePlaceRequest {
+/**
+ * Il viaggio con tutte le sue tappe, già in ordine cronologico.
+ *
+ * È la risposta di `GET /api/trips/:slug`, cioè quello che si apre toccando il magnete.
+ * Solo metadati — nessuna immagine — quindi anche otto tappe restano una risposta piccola.
+ */
+export interface TripDto {
+  slug: string;
+  name: string;
+  stops: StopDto[];
+}
+
+export interface CreateTripRequest {
+  name: string;
+}
+
+export interface CreateTripResponse {
+  slug: string;
+  /** Mostrato una volta sola: finisce negli URL scritti sui tag NFC di questo viaggio. */
+  writeToken: string;
+}
+
+export interface CreateStopRequest {
   name: string;
   lat: number;
   lon: number;
 }
 
-export interface CreatePlaceResponse {
+export interface CreateStopResponse {
   slug: string;
-  /** Mostrato una volta sola, alla creazione: finisce nell'URL scritto sul tag NFC. */
-  writeToken: string;
+}
+
+/** Quel che serve al menu per elencare viaggi e tappe. Nessun token, nessuna chiave. */
+export interface TripSummaryDto {
+  slug: string;
+  name: string;
+  createdAt: number;
+  /**
+   * La miniatura della foto più vecchia del viaggio, da usare come copertina nell'indice.
+   * È un riferimento a un blob cifrato: senza la chiave del viaggio resta illeggibile,
+   * quindi può viaggiare come qualsiasi altro `thumbKey`. null se il viaggio è vuoto.
+   */
+  coverThumbKey: string | null;
+  stops: Array<{
+    slug: string;
+    name: string;
+    photoCount: number;
+    /** Miniatura della foto più vecchia della tappa, per l'anteprima nell'indice. */
+    coverThumbKey: string | null;
+  }>;
 }
 
 export interface RegisterPhotoRequest {
