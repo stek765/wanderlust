@@ -28,7 +28,8 @@ export interface GalleryOptions {
   container: HTMLElement;
   photos: PhotoDto[];
   store: PhotoStore;
-  onOpen: (index: number) => void;
+  /** Il riquadro toccato. Arriva anche l'elemento, perché in selezione va segnato. */
+  onOpen: (index: number, tile: HTMLElement) => void;
 }
 
 /** L'unità di riga del mosaico, in pixel. Piccola: più è fine, meglio si incastrano. */
@@ -72,7 +73,7 @@ export class Gallery {
       tile.className = 'tile';
       tile.type = 'button';
       tile.setAttribute('aria-label', `Foto ${index + 1} di ${this.options.photos.length}`);
-      tile.addEventListener('click', () => this.options.onOpen(index));
+      tile.addEventListener('click', () => this.options.onOpen(index, tile));
 
       this.tiles.set(tile, photo);
       this.observer.observe(tile);

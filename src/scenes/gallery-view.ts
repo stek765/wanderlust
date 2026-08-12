@@ -10,6 +10,7 @@
  */
 
 import type { PhotoDto, StopDto } from '../../shared/api-types';
+import { deletePhoto } from '../lib/api-client';
 import type { PhotoStore } from '../lib/photo-store';
 import { concludi, durata, Velocita } from '../lib/gesto';
 import { averageColor, toGlow, toTint } from '../lib/tinta';
@@ -41,6 +42,17 @@ export class GalleryView {
   private stop: StopDto | null = null;
   private photos: PhotoDto[] = [];
   private cambioInSospeso = false;
+  /**
+   * Le foto scelte, quando si è in selezione. Null quando non ci si è.
+   *
+   * Un insieme di id e non di riquadri: i riquadri vengono buttati e rifatti a ogni cambio
+   * pagina, mentre la scelta di chi guarda deve sopravvivere allo scorrimento.
+   */
+  private scelte: Set<string> | null = null;
+  private readonly azioni: HTMLElement;
+  private readonly conteggio: HTMLElement;
+  /** Il pulsante che accende la selezione. Esiste solo per chi può cancellare. */
+  private sceglitore: HTMLButtonElement | null = null;
   /** Di quale foto è la tinta attualmente applicata: ricalcolarla a ogni foto è sprecato. */
   private tintaDi: string | null = null;
 
@@ -115,7 +127,35 @@ export class GalleryView {
     this.uploaderHost = document.createElement('div');
     this.uploaderHost.className = 'shelf__uploader';
 
-    this.element.append(bar, this.track, this.uploaderHost);
+    /*
+     * La barra della selezione: compare solo quando c'è una selezione in corso.
+     *
+     * Nasce da un problema pratico: cancellare dieci foto una per una significava aprirle
+     * una per una, e ogni cancellazione riportava la griglia all'inizio. Dieci volte a
+     * ritrovare il punto. Qui non si esce mai dalla griglia.
+     */
+    this.conteggio = document.createElement('span');
+    this.conteggio.className = 'scelta__conteggio';
+
+    this.azioni = document.createElement('div');
+    this.azioni.className = 'scelta';
+    this.azioni.hidden = true;
+
+    const annulla = document.createElement('button');
+    annulla.type = 'button';
+    annulla.className = 'scelta__annulla';
+    annulla.textContent = 'Annulla';
+    annulla.addEventListener('click', () => this.chiudiSelezione());
+
+    const cancella = document.createElement('button');
+    cancella.type = 'button';
+    cancella.className = 'scelta__elimina';
+    cancella.textContent = 'Elimina';
+    cancella.addEventListener('click', () => void this.eliminaScelte(cancella));
+
+    this.azioni.append(annulla, this.conteggio, cancella);
+
+    this.element.append(bar, this.track, this.uploaderHost, this.azioni);
     this.attachDragToClose(bar);
     this.attachSheetDrag();
     this.attachPageSwipe();
@@ -298,6 +338,105 @@ export class GalleryView {
     bar.addEventListener('pointercancel', molla);
   }
 
+  /** Entra o esce dalla selezione multipla. */
+  alternaSelezione(): boolean {
+    if (this.scelte) {
+      this.chiudiSelezione();
+      return false;
+    }
+
+    this.scelte = new Set();
+    this.element.classList.add('shelf--sceglie');
+    this.azioni.hidden = false;
+    this.aggiornaConteggio();
+    return true;
+  }
+
+  private chiudiSelezione(): void {
+    this.scelte = null;
+    this.element.classList.remove('shelf--sceglie');
+    this.azioni.hidden = true;
+    for (const tile of this.element.querySelectorAll('.tile--scelta')) {
+      tile.classList.remove('tile--scelta');
+    }
+    if (this.sceglitore) this.sceglitore.textContent = 'Seleziona';
+  }
+
+  private alternaScelta(photo: PhotoDto, tile: HTMLElement): void {
+    if (!this.scelte) return;
+
+    if (this.scelte.has(photo.id)) {
+      this.scelte.delete(photo.id);
+      tile.classList.remove('tile--scelta');
+    } else {
+      this.scelte.add(photo.id);
+      tile.classList.add('tile--scelta');
+    }
+
+    this.aggiornaConteggio();
+  }
+
+  private aggiornaConteggio(): void {
+    const n = this.scelte?.size ?? 0;
+    this.conteggio.textContent = n === 0 ? 'Tocca le foto da eliminare' : `${n} selezionate`;
+    this.azioni.classList.toggle('scelta--pronta', n > 0);
+  }
+
+  /**
+   * Cancella tutte le foto scelte, e solo dopo ridisegna una volta sola.
+   *
+   * Una per una il server le riceve in fila, ma la griglia si ricostruisce alla fine:
+   * ricostruirla a ogni cancellazione era quello che riportava la vista all'inizio ogni
+   * volta, e con dieci foto significava ritrovare il punto dieci volte.
+   *
+   * La conferma è il secondo tocco sullo stesso pulsante, come nel visore: un dialogo di
+   * sistema qui sopra è brutto e blocca tutto.
+   */
+  private async eliminaScelte(pulsante: HTMLButtonElement): Promise<void> {
+    const stop = this.stop;
+    const token = this.options.writeToken;
+    if (!this.scelte || this.scelte.size === 0 || !stop || !token) return;
+
+    if (pulsante.dataset.armed !== 'si') {
+      pulsante.dataset.armed = 'si';
+      pulsante.textContent = `Confermi? (${this.scelte.size})`;
+      setTimeout(() => {
+        pulsante.dataset.armed = 'no';
+        pulsante.textContent = 'Elimina';
+      }, 4000);
+      return;
+    }
+
+    const daTogliere = [...this.scelte];
+    pulsante.disabled = true;
+    pulsante.textContent = 'Elimino…';
+
+    const tolte = new Set<string>();
+    for (const id of daTogliere) {
+      try {
+        await deletePhoto(stop.slug, token, id);
+        tolte.add(id);
+      } catch {
+        // Una che non si cancella non deve impedire alle altre: si va avanti, e quelle
+        // rimaste restano selezionate così si capisce quali riprovare.
+      }
+    }
+
+    this.photos = this.photos.filter((p) => !tolte.has(p.id));
+    pulsante.disabled = false;
+    pulsante.dataset.armed = 'no';
+    pulsante.textContent = 'Elimina';
+
+    if (tolte.size === daTogliere.length) {
+      this.chiudiSelezione();
+    } else {
+      this.scelte = new Set(daTogliere.filter((id) => !tolte.has(id)));
+      this.aggiornaConteggio();
+    }
+
+    this.afterChange();
+  }
+
   /** Mostra le foto di questa tappa. L'elenco arriva da fuori: qui non si interroga niente. */
   open(stop: StopDto, photos: PhotoDto[]): void {
     this.stop = stop;
@@ -441,10 +580,31 @@ export class GalleryView {
       container: host,
       photos: foto,
       store: this.options.store,
-      // L'indice va riportato all'elenco intero della tappa: il visore sfoglia tutte le
-      // foto del posto, non solo quelle della pagina che si stava guardando.
-      onOpen: (index) => this.options.onOpenPhoto(this.photos, inizio + index),
+      onOpen: (index, tile) => {
+        const photo = foto[index];
+        if (!photo) return;
+
+        // In selezione un tocco sceglie invece di aprire: è l'unica differenza fra le due
+        // modalità, e basta a non far uscire mai dalla griglia.
+        if (this.scelte) {
+          this.alternaScelta(photo, tile);
+          return;
+        }
+
+        // L'indice va riportato all'elenco intero della tappa: il visore sfoglia tutte le
+        // foto del posto, non solo quelle della pagina che si stava guardando.
+        this.options.onOpenPhoto(this.photos, inizio + index);
+      },
     });
+
+    // Rientrando in una pagina già vista, i segni di spunta devono ricomparire dov'erano:
+    // la scelta vive negli id, i riquadri vengono rifatti a ogni cambio pagina.
+    if (this.scelte) {
+      host.querySelectorAll<HTMLElement>('.tile').forEach((tile, i) => {
+        const photo = foto[i];
+        if (photo && this.scelte?.has(photo.id)) tile.classList.add('tile--scelta');
+      });
+    }
   }
 
   /**
@@ -594,8 +754,26 @@ export class GalleryView {
 
   private buildUploader(): void {
     this.uploaderHost.replaceChildren();
+    this.sceglitore = null;
     const stop = this.stop;
     if (!stop || !this.options.writeToken) return;
+
+    /*
+     * "Seleziona" accanto al "+": cancellare più foto insieme.
+     *
+     * Prima si poteva cancellare solo aprendo una foto alla volta, e ogni cancellazione
+     * riportava la griglia in cima — con dieci foto significava ritrovare il punto dieci
+     * volte. Qui non si esce mai dalla griglia e il server le riceve tutte in fila.
+     */
+    const sceglie = document.createElement('button');
+    sceglie.type = 'button';
+    sceglie.className = 'uploader__trigger shelf__sceglie';
+    sceglie.textContent = 'Seleziona';
+    sceglie.addEventListener('click', () => {
+      sceglie.textContent = this.alternaSelezione() ? 'Fatto' : 'Seleziona';
+    });
+    this.uploaderHost.append(sceglie);
+    this.sceglitore = sceglie;
 
     new UploadPanel({
       container: this.uploaderHost,

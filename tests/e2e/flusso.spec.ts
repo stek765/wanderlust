@@ -292,6 +292,46 @@ test('le foto entrano nella griglia mentre le altre sono ancora in viaggio', asy
   expect(letture).toEqual([]);
 });
 
+/*
+ * Cancellare più foto insieme.
+ *
+ * Prima si poteva solo aprire una foto, cancellarla, e ritrovarsi la griglia riportata in
+ * cima: con dieci foto voleva dire ritrovare il punto dieci volte.
+ */
+test('si possono scegliere più foto e cancellarle in un colpo', async ({ page }) => {
+  const tagUrl = await creaViaggio(page, 'Thailandia', ['Bangkok']);
+  await page.goto(percorso(tagUrl));
+  await apriTappa(page, 0);
+
+  await page.locator('.shelf input[type="file"]').setInputFiles(
+    Array.from({ length: 3 }, (_, i) => ({
+      name: `ricordo-${i}.png`,
+      mimeType: 'image/png',
+      buffer: PNG_4x4,
+    })),
+  );
+  await expect(page.locator('.shelf .tile')).toHaveCount(3, { timeout: 60_000 });
+
+  await page.getByRole('button', { name: 'Seleziona' }).click();
+
+  // In selezione un tocco sceglie invece di aprire: il visore non deve comparire.
+  await page.locator('.shelf .tile').nth(0).click();
+  await page.locator('.shelf .tile').nth(1).click();
+  await expect(page.locator('.viewer')).toBeHidden();
+  await expect(page.locator('.scelta__conteggio')).toHaveText('2 selezionate');
+
+  // Il selettore è quello della barra di selezione e non il ruolo: anche il visore ha un
+  // pulsante che si chiama "Elimina", e per nome si finisce a cliccare quello.
+  const elimina = page.locator('.scelta__elimina');
+  await elimina.click();
+  await expect(elimina).toHaveText(/Confermi\? \(2\)/);
+  await elimina.click();
+
+  await expect(page.locator('.shelf .tile')).toHaveCount(1, { timeout: 30_000 });
+  // Finita la selezione si torna a guardare: la barra sparisce da sola.
+  await expect(page.locator('.scelta')).toBeHidden();
+});
+
 test('scorrere il carosello cambia la tappa corrente, senza toccare niente', async ({ page }) => {
   const tagUrl = await creaViaggio(page, 'Thailandia', ['Bangkok', 'Phuket']);
   await page.goto(percorso(tagUrl));
