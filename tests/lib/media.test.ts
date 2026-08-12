@@ -45,7 +45,9 @@ describe('ridimensionamento', () => {
     const fullPixels = full.width * full.height;
     const thumbPixels = thumb.width * thumb.height;
 
-    // Un ordine di grandezza almeno: è il motivo per cui la griglia si apre in fretta.
+    // Un ordine di grandezza almeno. Non serve più a far aprire in fretta il mosaico —
+    // quello ora scarica la versione grande — ma a tenere leggeri i cerchietti della
+    // pagina master, che sono decine su una schermata sola.
     expect(thumbPixels * 10).toBeLessThan(fullPixels);
   });
 });

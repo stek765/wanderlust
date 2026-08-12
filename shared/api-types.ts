@@ -66,11 +66,19 @@ export interface TripSummaryDto {
   name: string;
   createdAt: number;
   /**
-   * La miniatura della foto più vecchia del viaggio, da usare come copertina nell'indice.
+   * La miniatura della copertina del viaggio. Serve solo dove si disegna piccolo.
    * È un riferimento a un blob cifrato: senza la chiave del viaggio resta illeggibile,
    * quindi può viaggiare come qualsiasi altro `thumbKey`. null se il viaggio è vuoto.
    */
   coverThumbKey: string | null;
+  /**
+   * La stessa foto a piena risoluzione, per la scheda grande dell'indice.
+   *
+   * Esiste perché la scheda usava la miniatura: 300px stirati su una scheda che su un
+   * telefono moderno occupa oltre mille pixel veri. Il risultato era una copertina
+   * visibilmente sgranata, e sembrava un difetto grafico mentre era una scelta di dato.
+   */
+  coverKey: string | null;
   stops: Array<{
     slug: string;
     name: string;

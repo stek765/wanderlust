@@ -114,8 +114,22 @@ await shot('04-mappa-vuota');
 
 /** Un tocco su una scheda apre le sue foto. */
 async function apriTappa(i) {
+  /*
+   * Il foglio delle foto va chiuso prima.
+   *
+   * Da quando non copre più tutto lo schermo ma si ferma sotto la mappa, il carosello
+   * delle tappe gli resta sotto: con il foglio aperto una scheda non si può toccare, ed è
+   * il comportamento voluto — per cambiare tappa si chiude e si scorre. Lo strumento
+   * cliccava direttamente e finiva a bussare contro il pannello del caricamento.
+   */
+  const shelf = page.locator('.shelf');
+  if (await shelf.isVisible()) {
+    await page.locator('.shelf__back').click();
+    await shelf.waitFor({ state: 'hidden' });
+  }
+
   await page.locator('.deck__card').nth(i).click();
-  await page.locator('.shelf').waitFor();
+  await shelf.waitFor();
 }
 
 for (let i = 0; i < 3; i++) {

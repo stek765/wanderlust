@@ -92,7 +92,20 @@ export class StopDeck {
       this.rail.append(card);
     }
 
-    this.element.append(when, this.rail);
+    /*
+     * La data sta DENTRO la fila, come primo elemento, e scorre via con le tappe.
+     *
+     * Prima era una colonna fissa a sinistra: restava lì mentre tutto il resto scorreva,
+     * si aggiornava alla tappa corrente, e si teneva un pezzo di larghezza per sempre —
+     * su uno schermo dove ogni punto è conteso dalle foto. Dice quando comincia il
+     * viaggio, che è un'informazione da dare una volta: appena si scorre non serve più,
+     * e lo spazio torna alle tappe.
+     */
+    this.rail.prepend(when);
+    this.element.append(this.rail);
+
+    const prima = options.stops[0];
+    if (prima) this.showDate(prima);
     this.rail.addEventListener('scroll', () => this.onScroll(), { passive: true });
     this.attachDrag();
   }
@@ -219,7 +232,14 @@ export class StopDeck {
 
   /** Porta la fila su una scheda. La mappa la segue da sé, come per ogni altro scorrimento. */
   private glideTo(card: HTMLElement, behavior: ScrollBehavior): void {
-    this.rail.scrollTo({ left: this.railOffset(card), behavior });
+    /*
+     * Sulla prima tappa si torna a inizio fila invece di allineare la scheda.
+     *
+     * Allineandola, la data che la precede finirebbe subito fuori schermo e non si
+     * vedrebbe mai — cioè all'apertura, che è l'unico momento in cui serve.
+     */
+    const primo = card === this.cards.get(this.order[0] ?? '');
+    this.rail.scrollTo({ left: primo ? 0 : this.railOffset(card), behavior });
   }
 
   /** Riallinea data e conteggio dopo un caricamento o una cancellazione. */
@@ -231,7 +251,9 @@ export class StopDeck {
     if (meta) meta.textContent = `${stop.photos.length} foto`;
 
     void this.paintCover(card?.querySelector('.deck__cover') ?? null, stop);
-    if (this.current === stop.slug) this.showDate(stop);
+    // La data mostrata è quella d'inizio viaggio: si riallinea solo se a cambiare è
+    // stata la prima tappa.
+    if (this.order[0] === stop.slug) this.showDate(stop);
   }
 
   private buildCard(stop: StopDto): HTMLElement {
@@ -264,8 +286,86 @@ export class StopDeck {
       this.options.onOpen(stop.slug);
     });
 
+    this.attachSwipeUp(card, stop.slug);
+
     void this.paintCover(cover, stop);
     return card;
+  }
+
+  /**
+   * Tirare su una scheda apre le sue foto.
+   *
+   * Il tocco continua a funzionare, ma questo è il gesto che il pollice trova da solo: le
+   * foto stanno sotto il bordo dello schermo e vengono su, quindi il movimento della mano
+   * è già quello che succede sullo schermo. Toccare è preciso, trascinare è naturale — e
+   * su un telefono che si tiene con una mano sola vince il secondo.
+   *
+   * La scheda segue il dito mentre sale, e questo non è decorazione: senza, non c'è modo
+   * di sapere che il gesto sta funzionando prima che sia finito.
+   *
+   * Il conflitto da evitare è con lo scorrimento laterale della fila. Si decide alla
+   * prima direzione riconoscibile: se il dito è andato più in orizzontale che in
+   * verticale, il gesto è della fila e qui non si fa niente.
+   */
+  private attachSwipeUp(card: HTMLElement, slug: string): void {
+    /** Quanto deve salire il dito perché diventi una richiesta invece di un tremolio. */
+    const SOGLIA = 46;
+
+    let partenzaY: number | null = null;
+    let partenzaX = 0;
+    let deciso: 'su' | 'lato' | null = null;
+
+    const ripristina = () => {
+      card.style.transition = '';
+      card.style.transform = '';
+      partenzaY = null;
+      deciso = null;
+    };
+
+    card.addEventListener('pointerdown', (event) => {
+      partenzaY = event.clientY;
+      partenzaX = event.clientX;
+      deciso = null;
+    });
+
+    card.addEventListener('pointermove', (event) => {
+      if (partenzaY === null) return;
+
+      const dy = event.clientY - partenzaY;
+      const dx = event.clientX - partenzaX;
+
+      if (deciso === null) {
+        // Finché il movimento è minimo non si decide niente: una direzione scelta sui
+        // primi due pixel è una direzione scelta a caso.
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        deciso = Math.abs(dy) > Math.abs(dx) * 1.2 && dy < 0 ? 'su' : 'lato';
+      }
+      if (deciso !== 'su') return;
+
+      // Resistenza crescente: la scheda sale meno di quanto salga il dito, e più si tira
+      // più si oppone. È quello che dà la sensazione di una cosa che ha un peso.
+      const salita = Math.min(80, Math.pow(Math.max(0, -dy), 0.82));
+      card.style.transition = 'none';
+      card.style.transform = `translateY(${-salita}px) scale(${1 + salita / 900})`;
+    });
+
+    const fine = (event: PointerEvent) => {
+      if (partenzaY === null) return;
+      const dy = event.clientY - partenzaY;
+      const apri = deciso === 'su' && dy < -SOGLIA;
+
+      ripristina();
+      // Il flag sopravvive al `click` che arriva subito dopo: senza, tirando su si
+      // aprirebbe due volte.
+      if (apri) {
+        this.dragged = true;
+        setTimeout(() => (this.dragged = false), 0);
+        this.options.onOpen(slug);
+      }
+    };
+
+    card.addEventListener('pointerup', fine);
+    card.addEventListener('pointercancel', () => ripristina());
   }
 
   private async paintCover(cover: Element | null, stop: StopDto): Promise<void> {
@@ -273,7 +373,10 @@ export class StopDeck {
     if (!cover || !(cover instanceof HTMLElement) || !prima) return;
 
     try {
-      const url = await this.options.store.url(prima.thumbKey);
+      // La foto grande anche qui: la scheda ora è larga un terzo di schermo, e la
+      // miniatura da 300px ci arriva sgranata. Le copertine sono una per tappa, quindi
+      // sono poche immagini — il costo è trascurabile e vale la resa.
+      const url = await this.options.store.url(prima.key);
       cover.style.backgroundImage = `url("${url}")`;
       cover.classList.add('deck__cover--loaded');
     } catch {
@@ -330,10 +433,8 @@ export class StopDeck {
     if (this.current) this.cards.get(this.current)?.classList.remove('deck__card--current');
     this.cards.get(slug)?.classList.add('deck__card--current');
     this.current = slug;
-
-    const stop = this.byslug.get(slug);
-    if (stop) this.showDate(stop);
-
+    // La data non insegue più la tappa corrente: dice quando comincia il viaggio, e
+    // quello non cambia scorrendo.
     this.options.onFocus(slug);
   }
 

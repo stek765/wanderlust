@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { addToKeychain, exportKeychain, loadKeychain, needsExport, type KeychainEntry } from '../../src/lib/keychain';
+import { addToKeychain, exportKeychain, importKeychain, loadKeychain, needsExport, type KeychainEntry } from '../../src/lib/keychain';
 
 class MemoryStorage implements Storage {
   private map = new Map<string, string>();
@@ -95,5 +95,59 @@ describe('esportazione', () => {
 
   it('non avverte se non c\'è ancora niente da perdere', () => {
     expect(needsExport([], null)).toBe(false);
+  });
+
+  /*
+   * L'importazione è l'altra metà dell'esportazione: senza, il file prodotto non si
+   * poteva ricaricare da nessuna parte, e un backup che non si ripristina non è un backup.
+   */
+  describe('importazione', () => {
+    let storage: Storage;
+    beforeEach(() => {
+      storage = new MemoryStorage();
+    });
+
+    const fileEsportato = (entries: KeychainEntry[]) =>
+      JSON.stringify({ avviso: 'x', esportatoIl: '2026-08-12', viaggi: entries });
+
+    it('rimette in questo browser le chiavi esportate da un altro', () => {
+      const esito = importKeychain(storage, fileEsportato([entry('bangkok'), entry('lisbona')]));
+
+      expect(esito.aggiunte).toBe(2);
+      expect(loadKeychain(storage).map((e) => e.slug).sort()).toEqual(['bangkok', 'lisbona']);
+    });
+
+    it('reimportare lo stesso file non fa danni', () => {
+      const file = fileEsportato([entry('bangkok')]);
+      importKeychain(storage, file);
+      const esito = importKeychain(storage, file);
+
+      expect(esito.aggiunte).toBe(0);
+      expect(esito.giaPresenti).toBe(1);
+      expect(loadKeychain(storage)).toHaveLength(1);
+    });
+
+    it('non sovrascrive una chiave diversa per lo stesso viaggio, e lo dice', () => {
+      addToKeychain(storage, entry('bangkok'));
+      const altra = { ...entry('bangkok'), key: 'una-chiave-completamente-diversa' };
+
+      const esito = importKeychain(storage, fileEsportato([altra]));
+
+      // Una delle due non apre quelle foto: indovinare quale sarebbe scommettere su
+      // dei ricordi, quindi si segnala e non si tocca niente.
+      expect(esito.conflitti).toEqual(['Viaggio bangkok']);
+      expect(loadKeychain(storage)[0]?.key).toBe('chiave-in-base64url');
+    });
+
+    it('accetta anche un semplice elenco, non solo il file completo', () => {
+      const esito = importKeychain(storage, JSON.stringify([entry('bangkok')]));
+      expect(esito.aggiunte).toBe(1);
+    });
+
+    it('spiega perché un file non va, invece di fallire in silenzio', () => {
+      expect(() => importKeychain(storage, 'non sono json')).toThrow(/JSON/);
+      expect(() => importKeychain(storage, '{"viaggi": "no"}')).toThrow(/elenco/);
+      expect(() => importKeychain(storage, '{"viaggi": [{"roba": 1}]}')).toThrow(/leggibile/);
+    });
   });
 });

@@ -1,0 +1,11 @@
+-- L'ordine delle tappe si può correggere a mano.
+--
+-- Di norma l'ordine è il tempo: la data della foto più vecchia di ogni tappa. Regge finché
+-- le foto ci sono. Una tappa ancora vuota non ha una data, quindi non è collocabile nel
+-- tempo, e finisce in fondo per ordine di creazione — che è l'unica cosa onesta da farne,
+-- ma non è quasi mai il posto giusto.
+--
+-- Questa colonna è la via d'uscita: quando c'è, comanda lei. NULL significa "decidi tu in
+-- base alle date", che resta il comportamento di tutte le tappe finché nessuno tocca
+-- niente.
+ALTER TABLE stops ADD COLUMN position INTEGER;

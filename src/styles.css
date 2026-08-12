@@ -223,12 +223,29 @@ button:active {
  * galleggia sulla mappa". Prima le schede finivano tagliate dal bordo dello schermo e la
  * colonna della data ci passava sopra: qui la fila ha il suo spazio, e non ne esce.
  */
+/*
+ * La larghezza di una scheda, dichiarata una volta.
+ *
+ * Serve anche alla fila per calcolare lo spazio in coda, e finché i due numeri erano
+ * scritti separatamente restavano indietro l'uno rispetto all'altro: la scheda è cresciuta
+ * due volte e la coda è rimasta ferma a 112px, con l'ultima tappa che non arrivava più ad
+ * allinearsi.
+ */
+:root {
+  --tappa: clamp(178px, 52vw, 250px);
+}
+
+/*
+ * Una colonna sola.
+ *
+ * Era una griglia a due colonne, `auto` per la data e `1fr` per la fila. Da quando la data
+ * sta dentro la fila, quel primo binario è rimasto vuoto e la fila si è ritrovata nella
+ * colonna `auto`: larga quanto il contenuto invece che quanto lo schermo. Da lì l'aria
+ * compressa e le schede appiccicate ai bordi.
+ */
 .deck {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: stretch;
-  gap: 14px;
-  padding: 14px 0 calc(env(safe-area-inset-bottom) + 14px) 16px;
+  display: block;
+  padding: 20px 0 calc(env(safe-area-inset-bottom) + 20px) 18px;
   background: linear-gradient(to top, rgb(6 9 13 / 96%) 72%, rgb(6 9 13 / 74%));
   backdrop-filter: blur(18px);
   border-top: 1px solid rgb(255 255 255 / 8%);
@@ -242,6 +259,9 @@ button:active {
   justify-content: center;
   align-items: center;
   gap: 1px;
+  /* Dentro una fila flessibile va bloccato, o si schiaccia man mano che si aggiungono
+     tappe finché la data non diventa illeggibile. */
+  flex: none;
   width: 46px;
   color: var(--tenue);
   font-size: 12px;
@@ -277,7 +297,19 @@ button:active {
 
 .deck__rail {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  /* Aria fra una tappa e l'altra: a dieci pixel sembravano un blocco unico segmentato. */
+  gap: 16px;
+  /* Le ombre delle schede non devono essere tagliate dal bordo della fila. */
+  padding-block: 6px;
+  /*
+   * Al browser resta lo scorrimento laterale, a noi i gesti verticali.
+   *
+   * Senza questa riga il dito che sale su una scheda viene interpretato come un tentativo
+   * di scorrere la pagina, il browser se lo prende, e il gesto che apre le foto non
+   * arriva mai fino a qui.
+   */
+  touch-action: pan-x;
   /*
    * Lo spazio in coda serve a portare l'ultima tappa a sinistra come tutte le altre:
    * senza, resterebbe inchiodata al bordo destro e non diventerebbe mai corrente.
@@ -288,7 +320,7 @@ button:active {
    * è tutto ciò che si vedeva. Così il fondo corsa coincide con l'ultima tappa allineata,
    * e non c'è più niente da correggere.
    */
-  padding-right: calc(100% - 112px);
+  padding-right: calc(100% - var(--tappa));
   overflow-x: auto;
   /* Col mouse il trascinamento lo gestisce stop-deck.ts: qui si toglie solo la selezione
      del testo, che altrimenti parte a ogni strisciata. */
@@ -300,11 +332,24 @@ button:active {
   display: none;
 }
 
+/*
+ * La misura è in frazione di schermo, non in pixel fissi.
+ *
+ * A 112px fissi le schede erano francobolli su un telefono moderno e ci si leggeva a
+ * malapena il nome; e su schermi diversi cambiavano di peso senza motivo. A ~38% della
+ * larghezza se ne vedono due e mezza — abbastanza da capire che si scorre, abbastanza
+ * grandi da riconoscere il posto dalla foto invece che dalla scritta.
+ */
 .deck__card {
   position: relative;
   flex: none;
-  width: 112px;
-  aspect-ratio: 4 / 5;
+  width: var(--tappa);
+  /* Orizzontali e non verticali: una scheda più alta che larga schiaccia la foto in una
+     feritoia, e di un posto si riconosce l'orizzonte, non un ritaglio verticale. */
+  aspect-ratio: 5 / 4;
+  /* Dichiarato perché il passaggio da spenta ad accesa è la cosa che si vede di più in
+     questa schermata, e senza il browser lo prepara mentre lo sta già facendo. */
+  will-change: transform, opacity;
   padding: 0;
   border: 0;
   overflow: hidden;
@@ -388,14 +433,42 @@ button:active {
  * Si apre toccando la scheda corrente e copre la mappa. È l'unico posto dove si sfoglia:
  * la schermata principale serve a scegliere dove, questa a guardare cosa.
  */
+/*
+ * Un foglio che sale da sotto e si ferma: la mappa resta visibile sopra.
+ *
+ * Prima copriva tutto lo schermo, e nel momento in cui si aprivano le foto il posto in cui
+ * erano state scattate spariva — cioè spariva la ragione per cui questo sito esiste. Il
+ * viaggio e le sue foto devono stare sullo schermo insieme.
+ *
+ * `svh` e non `vh`: su iOS la barra degli indirizzi di Safari si ritrae scorrendo, e con
+ * `vh` il foglio cambierebbe altezza sotto il dito mentre si guardano le foto.
+ */
 .shelf {
   position: fixed;
-  inset: 0;
+  inset: 34svh 0 0 0;
   z-index: 8;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  /* A scorrere sono le pagine dentro, non il foglio: qui si taglia e basta. */
+  overflow: hidden;
   background: var(--sfondo);
-  animation: sale-scaffale 340ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* Gli angoli in alto arrotondati sono ciò che lo fa leggere come un foglio appoggiato
+     sopra la mappa invece che come una schermata nuova. */
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -18px 40px rgb(0 0 0 / 55%);
+  /*
+   * ⚠️ Qui NON va nessuna `animation`.
+   *
+   * C'era `animation: sale-scaffale ... both`, e il `fill-mode: both` inchioda il valore
+   * finale — `transform: translateY(0)` — per sempre, anche a animazione conclusa. Le
+   * animazioni CSS battono gli stili inline: il dito trascinava, il codice scriveva la
+   * trasformazione, e il browser la ignorava. Il foglio non si muoveva di un pixel, poi
+   * spariva di colpo. Sembrava un'animazione da regolare ed era un'animazione che non
+   * partiva mai.
+   *
+   * È il quarto inciampo della stessa famiglia in questo progetto — vedi la regola sul CSS
+   * che vince sulle classi che nascondono. Salita e discesa si fanno da `gallery-view`, con
+   * lo stesso `transform` che usa il trascinamento: un meccanismo solo, nessuna gara.
+   */
+  will-change: transform;
 }
 
 /*
@@ -407,15 +480,53 @@ button:active {
   display: none;
 }
 
-@keyframes sale-scaffale {
-  from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
+/*
+ * Le pagine della tappa, in fila orizzontale.
+ *
+ * Larga il triplo e spostata di un terzo, come il visore: al centro c'è la pagina che si
+ * guarda, le vicine si affacciano dai bordi appena il dito si muove. `pan-y` lascia al
+ * browser lo scorrimento verticale dentro la pagina e tiene per noi quello laterale.
+ */
+.shelf__pages {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  will-change: transform;
+  touch-action: pan-y;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .shelf {
-    animation-duration: 1ms;
-  }
+.page {
+  flex: none;
+  width: 33.3333%;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * Il "+" galleggia, e non sta in fondo alle foto.
+ *
+ * In fondo a cento foto non lo trovava nessuno: è il difetto che ha fatto nascere le
+ * pagine, e lasciarlo lì le avrebbe rese inutili. Sta in basso a destra, dove il pollice
+ * arriva senza spostare la mano.
+ */
+.shelf__uploader {
+  position: absolute;
+  right: 14px;
+  bottom: calc(env(safe-area-inset-bottom) + 14px);
+  z-index: 3;
+}
+
+.shelf__uploader .uploader {
+  padding: 0;
+  text-align: right;
+}
+
+.shelf__uploader .uploader__trigger {
+  backdrop-filter: blur(12px);
+  background: rgb(18 24 32 / 78%);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 45%);
 }
 
 /* La tinta presa dalle foto: il mare fa ciano, il tramonto arancio. */
@@ -428,64 +539,155 @@ button:active {
   background: linear-gradient(to bottom, var(--tinta, transparent), transparent);
 }
 
+/*
+ * Una riga sola, alta quanto un dito e non un titolo.
+ *
+ * Era un blocco con il nome del posto a caratteri grandi e le date sotto, e si mangiava un
+ * quinto dello schermo per dire una cosa che l'utente sa già: ha appena toccato quella
+ * tappa. Qui il nome e le date stanno sulla stessa riga, piccoli, e tutto lo spazio che
+ * avanza va alle foto.
+ */
+/*
+ * Le informazioni stanno SOPRA le foto, non in una barra sopra di loro.
+ *
+ * Una barra piena costava una striscia di schermo per dire il nome di una tappa che chi
+ * guarda ha appena toccato — e quella striscia veniva tolta alla mappa. Qui il testo
+ * galleggia nell'angolo, sopra le prime foto, tenuto leggibile da una sfumatura appena
+ * accennata invece che da un fondo pieno.
+ *
+ * `position: absolute` e non `sticky`: non deve occupare spazio nel flusso, o il mosaico
+ * ricomincerebbe più in basso e avremmo solo cambiato il nome al problema.
+ */
 .shelf__bar {
-  position: sticky;
+  position: absolute;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: calc(env(safe-area-inset-top) + 12px) 16px 14px;
-  background: linear-gradient(to bottom, var(--sfondo) 72%, rgb(10 13 18 / 0%));
+  gap: 8px;
+  padding: 14px 12px 26px;
+  background: linear-gradient(to bottom, rgb(6 9 13 / 62%) 0%, rgb(6 9 13 / 28%) 55%, rgb(6 9 13 / 0%) 100%);
+  /* Il browser non deve usare i gesti verticali che partono da qui per scorrere: sono
+     nostri, e servono a chiudere il foglio. */
+  touch-action: none;
 }
 
+/* Scorrendo le foto l'informazione si toglie di mezzo: ha già detto quello che doveva. */
+.shelf--scorso .shelf__bar {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+
+.shelf__bar {
+  transition: opacity 260ms ease;
+}
+
+/* La maniglia: dice che il foglio si trascina, prima ancora che qualcuno ci provi. */
+.shelf__grip {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  width: 38px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 22%);
+}
+
+/* Piccolo e senza cerchio: il modo principale di chiudere è trascinare giù, questo è la
+   scorciatoia per chi preferisce toccare. */
 .shelf__back {
   flex: none;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--bordo);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: var(--superficie);
-  color: var(--testo);
+  background: transparent;
+  color: var(--tenue);
   font-size: 20px;
   line-height: 1;
 }
 
+/* Nome e date sulla stessa riga, separati da un punto: è la riga del riferimento. */
 .shelf__texts {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   min-width: 0;
 }
 
+/* Sottotono di proposito: sono didascalie appoggiate sulle foto, non un titolo. */
 .shelf__title {
   margin: 0;
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+  flex: none;
+  color: rgb(255 255 255 / 82%);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 70%);
 }
 
 .shelf__meta {
-  margin: 2px 0 0;
-  color: var(--fioco);
-  font-size: 12px;
+  margin: 0;
+  overflow: hidden;
+  color: rgb(255 255 255 / 55%);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 70%);
+}
+
+/* Il punto di separazione lo mette il CSS: nel DOM restano due elementi distinti, perché
+   il nome e le date sono due informazioni e non una stringa sola. */
+.shelf__meta::before {
+  content: '·';
+  margin-right: 8px;
+  opacity: 0.6;
 }
 
 /* --- Griglia --------------------------------------------------------------- */
 
+/*
+ * Nessun margine laterale sul telefono: le foto arrivano al bordo dello schermo.
+ *
+ * I 12px di prima incorniciavano il mosaico dentro una striscia di fondo, e la cornice
+ * era la cosa più visibile della schermata. Su schermi larghi il margine torna, perché
+ * lì una colonna di foto larga due metri non si guarda.
+ */
 .gallery {
   position: relative;
   max-width: var(--colonna);
   margin: 0 auto;
-  padding: 0 12px;
+  padding: 0;
+}
+
+@media (min-width: 720px) {
+  .gallery {
+    padding: 0 12px;
+  }
 }
 
 /*
- * `clamp` invece di una misura fissa: su un telefono servono riquadri da un terzo di
- * schermo, su un portatile riquadri da 200px. Con `minmax(110px, 1fr)` fisso, su desktop
- * uscivano venti colonne di francobolli.
+ * Le colonne e l'altezza dei riquadri le decide `gallery.ts`, che conosce le proporzioni
+ * di ogni foto: qui sta solo l'unità di riga su cui i riquadri si incastrano. I due valori
+ * sono in `RIGA` e `SPAZIO` dentro quel file — se cambiano lì, vanno cambiati anche qui.
  */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(clamp(100px, 29vw, 190px), 1fr));
-  gap: 6px;
+  grid-auto-rows: 6px;
+  gap: 3px;
+  /*
+   * Gli angoli esterni del mosaico seguono quelli dello schermo: è il dettaglio che fa
+   * sembrare le foto incastonate nel telefono invece che appoggiate sopra. Arrotondato il
+   * contenitore e non i singoli riquadri, perché quali riquadri stiano sui bordi dipende
+   * da quante colonne ci sono, e il CSS non lo sa.
+   */
+  border-radius: 20px;
+  overflow: hidden;
 }
 
 .tile {
@@ -493,14 +695,13 @@ button:active {
   padding: 0;
   border: 0;
   overflow: hidden;
-  border-radius: var(--r-s);
+  /* Appena smussati: quasi a contatto, come nel riferimento. Il raggio pieno faceva
+     sembrare le foto delle figurine invece di un mosaico. */
+  border-radius: 4px;
   background: var(--superficie);
-  /* Quadrati: la griglia resta compatta con foto verticali e orizzontali mescolate, e
-     l'altezza è nota prima che le miniature arrivino, quindi la pagina non balla
-     sotto il dito mentre si scorre. */
-  aspect-ratio: 1;
   transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 
 .tile:active {
   transform: scale(0.97);
@@ -566,8 +767,13 @@ button:active {
   inset: 0;
   z-index: 10;
   background: #05070a;
-  display: grid;
-  grid-template-rows: auto 1fr;
+  /*
+   * Blocco e non griglia: da quando comandi e didascalia galleggiano sopra la foto, la
+   * griglia continuava a riservare loro una riga e la foto restava alta meno dello
+   * schermo, con una fascia nera in fondo. Qui la fila delle foto prende tutto, e il
+   * resto ci sta sopra.
+   */
+  overflow: hidden;
 }
 
 /*
@@ -581,53 +787,149 @@ button:active {
 
 /* Una barra sola, in alto: contatore al centro, chiusura a sinistra, cancellazione a
    destra. Prima il contatore galleggiava da solo in mezzo al nero. */
+/*
+ * I comandi galleggiano sulla foto, non su una barra.
+ *
+ * Erano tre pillole grigie in fila dentro una fascia nera sopra l'immagine: occupavano una
+ * striscia di schermo, sembravano un modulo, e mangiavano proprio lo spazio della cosa che
+ * si era venuti a guardare. Qui sono due dischi ai due angoli, di vetro, e la didascalia
+ * sta in basso — dove non copre mai il soggetto, che nelle foto sta quasi sempre al centro.
+ */
 .viewer__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: calc(env(safe-area-inset-top) + 12px) 14px 12px;
-  background: linear-gradient(to bottom, rgb(0 0 0 / 70%), transparent);
+  gap: 10px;
+  padding: calc(env(safe-area-inset-top) + 12px) 14px 40px;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 55%), rgb(0 0 0 / 0%));
+  pointer-events: none;
+}
+
+.viewer__bar > * {
+  pointer-events: auto;
 }
 
 .viewer__close,
 .viewer__action {
-  padding: 8px 14px;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
-  color: var(--testo);
-  font-size: 14px;
-  backdrop-filter: blur(8px);
+  border-radius: 50%;
+  background: rgb(20 24 30 / 55%);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 35%);
+}
+
+/* Il cestino sta all'angolo opposto: due comandi vicini, di cui uno distrugge, è un invito
+   a sbagliare con il pollice. */
+.viewer__action {
+  margin-left: auto;
 }
 
 /* Rosso solo dopo il primo tocco, quando il pulsante chiede conferma: prima era acceso
    sempre, e un comando distruttivo che urla a riposo è solo rumore. */
-.viewer__action--danger {
-  color: var(--tenue);
-}
-
 .viewer__action--danger[data-armed='si'] {
-  background: rgb(255 107 107 / 16%);
+  width: auto;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgb(255 107 107 / 22%);
   color: var(--pericolo);
+  font-size: 13px;
 }
 
+/*
+ * La didascalia in fondo, non in cima.
+ *
+ * In alto stava in mezzo ai due comandi e li faceva sembrare una barra degli strumenti di
+ * quindici anni fa. In basso è una didascalia: si legge se la si cerca, e non contende
+ * niente alla foto.
+ */
 .viewer__caption {
-  margin: 0 auto;
-  color: var(--tenue);
-  font-size: 13px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 40px 16px calc(env(safe-area-inset-bottom) + 16px);
+  background: linear-gradient(to top, rgb(0 0 0 / 55%), rgb(0 0 0 / 0%));
+  color: rgb(255 255 255 / 72%);
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 70%);
+  pointer-events: none;
+}
+
+/*
+ * La lastra di una foto: l'immagine sopra, la sua versione sfocata sotto.
+ *
+ * È quello che toglie le bande nere ai lati delle verticali. Il colore che riempie i bordi
+ * viene dalla foto stessa, quindi è sempre quello giusto — cosa che nessun grigio scelto a
+ * mano potrebbe essere per tutte le foto.
+ */
+.viewer__slide {
+  position: relative;
+  flex: none;
+  width: 33.3333%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.viewer__blur {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+  filter: blur(34px) saturate(140%) brightness(0.55);
+  /* Ingrandita: sfocando, i bordi dell'immagine sbavano e lascerebbero un alone chiaro
+     lungo il perimetro. */
+  transform: scale(1.25);
+}
+
+/*
+ * La fila delle tre foto: precedente, corrente, successiva.
+ *
+ * Larga il triplo dello schermo e spostata di un terzo, così al centro c'è sempre quella
+ * aperta e le vicine si affacciano dai bordi appena il dito si muove. `touch-action` le
+ * toglie al browser i gesti orizzontali, che qui servono a noi.
+ */
+.viewer__track {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  will-change: transform;
+  touch-action: pan-y;
 }
 
 .viewer__image {
   min-height: 0;
   width: 100%;
   height: 100%;
+  position: relative;
   object-fit: contain;
-  transition: opacity 200ms ease;
-}
-
-.viewer__image.is-loading {
-  opacity: 0.25;
+  /*
+   * Nessun margine fra una foto e l'altra.
+   *
+   * C'era un filo di stacco per non far sembrare due foto chiare di fila una sola immagine
+   * che scivola. Ma le foto verticali su uno schermo verticale lasciano già le loro bande
+   * nere ai lati, e il margine le sommava: durante lo scorrimento fra due verticali si
+   * apriva una voragine nera larga un dito. Il problema che il margine risolveva non si è
+   * mai presentato; quello che creava sì.
+   */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /*
@@ -862,6 +1164,18 @@ button:active {
   color: #a3352f;
 }
 
+/* L'esito di un'importazione: una riga che compare dopo il gesto e non prima, quindi
+   niente spazio riservato quando è vuota. */
+.panel__import-esito {
+  flex-basis: 100%;
+  color: var(--p-fioco);
+  font-size: 12.5px;
+}
+
+.panel__import-esito:empty {
+  display: none;
+}
+
 /*
  * I pulsanti, tutti da qui.
  *
@@ -1069,6 +1383,14 @@ button:active {
   padding: 0;
 }
 
+/*
+ * Niente selezione del testo su queste.
+ *
+ * Tenere premuto un nome su iOS fa partire il selettore di testo — le due maniglie blu, la
+ * lente d'ingrandimento — e da lì in poi il dito sta muovendo un cursore, non una tappa.
+ * Il riordino diventava letteralmente impossibile, non difficile. `-webkit-touch-callout`
+ * spegne anche il menu contestuale, che è l'altra cosa che una pressione lunga scatena.
+ */
 .stopchip {
   position: relative;
   display: flex;
@@ -1076,6 +1398,9 @@ button:active {
   gap: 8px;
   min-height: 36px;
   padding: 4px 10px 4px 4px;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
   border-radius: 999px;
   background: var(--p-superficie);
   box-shadow: 0 1px 3px rgb(16 21 28 / 10%);
@@ -1111,7 +1436,15 @@ button:active {
 
 /* La crocetta compare solo quando serve: a riposo la pastiglia è un'informazione, non un
    comando. */
+/*
+ * La crocetta esiste solo in modifica.
+ *
+ * Un elenco di posti dove ogni riga ha una × accanto è un elenco che sembra chiedere di
+ * essere svuotato: si legge come una lista di cose da togliere invece che di posti dove si
+ * è stati. Tenendo premuto compare, ed è lo stesso gesto con cui si riordinano.
+ */
 .stopchip__remove {
+  display: none;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -1123,6 +1456,47 @@ button:active {
   line-height: 1;
   opacity: 0;
   transition: opacity 160ms ease, color 160ms ease;
+}
+
+.stops--modifica .stopchip__remove {
+  display: block;
+  opacity: 1;
+  color: var(--p-pericolo, #a3352f);
+}
+
+/*
+ * In modifica le tappe ondeggiano appena.
+ *
+ * Non è un vezzo: è il segnale che dice "adesso queste si spostano", ed è lo stesso di
+ * ogni telefono, quindi non va imparato. Sfasata di poco fra una e l'altra, o
+ * ondeggerebbero all'unisono come una cosa sola invece che come tante.
+ */
+.stops--modifica .stopchip {
+  animation: ondeggia 620ms ease-in-out infinite;
+  touch-action: none;
+}
+
+.stops--modifica .stopchip:nth-child(even) {
+  animation-delay: -310ms;
+}
+
+@keyframes ondeggia {
+  0%, 100% { transform: rotate(-0.7deg); }
+  50%      { transform: rotate(0.7deg); }
+}
+
+/* Quella in mano non ondeggia: si stacca dalle altre e le segue il dito. */
+.stopchip--presa {
+  position: relative;
+  z-index: 2;
+  animation: none !important;
+  box-shadow: 0 10px 26px rgb(16 21 28 / 30%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stops--modifica .stopchip {
+    animation: none;
+  }
 }
 
 .stopchip:hover .stopchip__remove,
@@ -1168,9 +1542,15 @@ button:active {
 /* --- Il selettore di copertina --------------------------------------------- */
 
 /*
- * Tutte le foto del viaggio in una fila che si scorre: si tocca quella che lo racconta.
- * Le anteprime entrano una dopo l'altra, così si capisce che stanno arrivando invece di
- * comparire tutte insieme come un blocco.
+ * Tutte le foto del viaggio, per scegliere quella che lo racconta.
+ *
+ * Era una fila orizzontale di quadratini da 64px: su un telefono ne entravano quattro,
+ * minuscoli e ritagliati, e il resto stava dietro uno scorrimento laterale che nessuno
+ * pensa a fare dentro un pannello che già scorre in verticale. Scegliere una foto
+ * guardandola grande quanto un'unghia non è scegliere.
+ *
+ * Ora è una griglia che usa tutta la larghezza, con riquadri grandi abbastanza da
+ * riconoscere una faccia.
  */
 .picker[hidden] {
   display: none;
@@ -1182,23 +1562,28 @@ button:active {
 }
 
 .picker__title {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   color: var(--p-fioco);
   font-size: 12.5px;
 }
 
 .picker__rail {
-  display: flex;
-  gap: 8px;
-  padding-bottom: 6px;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  display: grid;
+  /* Quattro per riga su un telefono, di più su schermi larghi: la misura minima è
+     quella sotto cui una foto smette di essere riconoscibile. */
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+  /* Un viaggio da duecento foto non deve allungare il pannello all'infinito: oltre
+     questa altezza la griglia scorre per conto suo. */
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .picker__shot {
-  flex: none;
-  width: 64px;
-  height: 64px;
+  width: 100%;
+  aspect-ratio: 1;
   padding: 0;
   border: 0;
   border-radius: 12px;

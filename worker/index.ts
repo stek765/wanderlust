@@ -125,6 +125,36 @@ app.patch('/api/trips/:slug/cover', async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Fissa l'ordine delle tappe, o lo toglie mandando un elenco vuoto.
+ *
+ * Token master e non token di scrittura: riordinare le tappe cambia il racconto del
+ * viaggio e il disegno della rotta sulla mappa, che è una cosa da chi possiede il viaggio,
+ * non da chiunque abbia toccato un magnete.
+ */
+app.patch('/api/trips/:slug/order', async (c) => {
+  if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
+
+  const body = await c.req.json<{ slugs?: unknown }>().catch(() => null);
+  if (!Array.isArray(body?.slugs) || !body.slugs.every((s) => typeof s === 'string')) {
+    return c.json({ error: 'slugs deve essere un elenco di stringhe' }, 400);
+  }
+
+  const tripSlug = c.req.param('slug');
+
+  if (body.slugs.length === 0) {
+    await db.clearStopOrder(c.env.DB, tripSlug);
+    return c.json({ ok: true });
+  }
+
+  const ok = await db.setStopOrder(c.env.DB, tripSlug, body.slugs as string[]);
+  // Un ordine parziale è peggio di nessun ordine: o l'elenco è esattamente quello delle
+  // sue tappe, o non si scrive niente.
+  if (!ok) return c.json({ error: 'l\'elenco non corrisponde alle tappe di questo viaggio' }, 400);
+
+  return c.json({ ok: true });
+});
+
 app.delete('/api/trips/:slug', async (c) => {
   if (!(await isMaster(c.env, c.req.raw))) return unauthorized(c);
 

@@ -134,7 +134,9 @@ export async function renderTripPage(root: HTMLElement, route: TripRoute): Promi
   root.append(stage, shelf.element);
 
   // Sui nostri browser il ☰ c'è sempre; su quello di chi riceve un link non compare.
-  Menu.mount(root);
+  // Aprendolo, le foto eventualmente aperte si chiudono: restavano sotto il cassetto, e
+  // chiudendo il menu ci si ritrovava dentro una tappa che si credeva di aver lasciato.
+  Menu.mount(root, () => shelf.close());
 
   // Il cestino nel visore deve togliere la foto dalla tappa aperta, non da un'altra.
   if (writeToken) {

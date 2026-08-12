@@ -141,6 +141,24 @@ export async function setTripCover(
   );
 }
 
+/**
+ * Fissa l'ordine delle tappe di un viaggio. Un elenco vuoto lo toglie, e le tappe tornano
+ * a disporsi per data.
+ */
+export async function setStopOrder(
+  masterToken: string,
+  tripSlug: string,
+  slugs: string[],
+): Promise<void> {
+  await parse(
+    await fetch(`/api/trips/${tripSlug}/order`, {
+      method: 'PATCH',
+      headers: asJson(masterToken),
+      body: JSON.stringify({ slugs }),
+    }),
+  );
+}
+
 export async function deleteStop(masterToken: string, stopSlug: string): Promise<void> {
   await parse(
     await fetch(`/api/stops/${stopSlug}`, {

@@ -14,7 +14,19 @@ import exifr from 'exifr';
 
 /** Lato lungo della versione che si vede aprendo una foto a schermo intero. */
 export const FULL_MAX_EDGE = 1600;
-/** Lato lungo della miniatura in griglia. 300px copre anche gli schermi a 3x. */
+/**
+ * Lato lungo della miniatura. 300px, e resta così.
+ *
+ * Per un momento è stata alzata a 640, perché a mezza schermata i 300 si vedevano. Era la
+ * risposta sbagliata alla domanda giusta: **da quando il mosaico e le schede delle tappe
+ * usano la versione grande, la miniatura serve solo ai cerchietti della pagina master**,
+ * che sono larghi trentaquattro punti. Alzarla avrebbe appesantito ogni caricamento futuro
+ * per una nitidezza che nessuno guarda — e non avrebbe risolto niente per le foto già su
+ * R2, che la miniatura ce l'hanno già com'era.
+ *
+ * ⚠️ Se un giorno il mosaico tornasse a usare la miniatura per non scaricare le foto
+ * grandi su rete lenta, questo numero va rialzato **insieme** a quella scelta, non prima.
+ */
 export const THUMB_MAX_EDGE = 300;
 
 const QUALITY = 0.82;

@@ -7,6 +7,35 @@
 
 import type { PhotoDto, StopDto, TripDto, TripSummaryDto } from '../shared/api-types';
 
+/**
+ * La data di una tappa: quella della sua foto più vecchia. Null se la tappa è vuota.
+ *
+ * Una tappa senza foto non ha un posto nel tempo, e non è un difetto da aggirare: è
+ * un'informazione che non esiste ancora. Inventarle una data la metterebbe nel punto
+ * sbagliato del racconto senza che nessuno capisca perché.
+ */
+const DATA_TAPPA = '(SELECT MIN(p.taken_at) FROM photos p WHERE p.stop_slug = s.slug) AS first_taken_at';
+
+/**
+ * L'ordine delle tappe, scritto una volta sola perché valga ovunque.
+ *
+ * Esisteva in due copie divergenti, e nessuna delle due sembrava sbagliata guardandola da
+ * sola: la pagina del viaggio ordinava per data, il menu della pagina master per data di
+ * creazione. Il risultato era che la mappa collegava le tappe nel tempo mentre l'elenco
+ * sotto le mostrava in un altro ordine — due racconti dello stesso viaggio, e nessuno dei
+ * due credibile. **Chi aggiunge un terzo elenco di tappe usa questa costante.**
+ *
+ * Le tappe senza foto finiscono in fondo, per ordine di creazione: non essendo collocabili
+ * nel tempo, quello è l'unico ordine onesto che si possa dare loro.
+ *
+ * `position` sta davanti a tutto e vale come eccezione: quando qualcuno sposta una tappa a
+ * mano, a **tutte** le tappe di quel viaggio viene scritta una posizione, e da lì in poi
+ * comanda quella. O tutte o nessuna — mescolare tappe posizionate e tappe ordinate per
+ * data darebbe un ordine che nessuno saprebbe più spiegare.
+ */
+const ORDINE_TAPPE =
+  '(s.position IS NULL) ASC, s.position ASC, (first_taken_at IS NULL) ASC, first_taken_at ASC, s.created_at ASC';
+
 export interface PhotoRow {
   id: string;
   stop_slug: string;
@@ -87,10 +116,10 @@ export async function getTrip(db: D1Database, tripSlug: string): Promise<TripDto
 
   const { results: stops } = await db
     .prepare(
-      `SELECT s.*, (SELECT MIN(p.taken_at) FROM photos p WHERE p.stop_slug = s.slug) AS first_taken_at
+      `SELECT s.*, ${DATA_TAPPA}
          FROM stops s
         WHERE s.trip_slug = ?
-        ORDER BY (first_taken_at IS NULL) ASC, first_taken_at ASC, s.created_at ASC`,
+        ORDER BY ${ORDINE_TAPPE}`,
     )
     .bind(trip.slug)
     .all<StopRow & { first_taken_at: number | null }>();
@@ -148,6 +177,45 @@ export async function setTripCover(
   return (result.meta.changes ?? 0) > 0;
 }
 
+/**
+ * Fissa l'ordine delle tappe di un viaggio, così come glielo si è dato a mano.
+ *
+ * Scrive una posizione a **tutte** le tappe elencate, non solo a quella spostata: mescolare
+ * tappe posizionate e tappe ordinate per data darebbe un ordine che nessuno saprebbe più
+ * spiegare guardandolo.
+ *
+ * Falso se l'elenco non corrisponde esattamente alle tappe di quel viaggio — mancante,
+ * ripetuto, o con dentro una tappa altrui. Un ordine parziale è peggio di nessun ordine.
+ */
+export async function setStopOrder(db: D1Database, tripSlug: string, slugs: string[]): Promise<boolean> {
+  const { results } = await db
+    .prepare('SELECT slug FROM stops WHERE trip_slug = ?')
+    .bind(tripSlug)
+    .all<{ slug: string }>();
+
+  const sue = new Set(results.map((r) => r.slug));
+  if (slugs.length !== sue.size || new Set(slugs).size !== slugs.length) return false;
+  if (!slugs.every((slug) => sue.has(slug))) return false;
+
+  await db.batch(
+    slugs.map((slug, posizione) =>
+      db.prepare('UPDATE stops SET position = ? WHERE slug = ? AND trip_slug = ?').bind(posizione, slug, tripSlug),
+    ),
+  );
+
+  return true;
+}
+
+/**
+ * Toglie l'ordine manuale: le tappe tornano a disporsi da sole, per data.
+ *
+ * Serve perché una scelta senza ritorno non è una scelta. Chi sposta una tappa deve poter
+ * dire "lascia stare, rimettile come vengono".
+ */
+export async function clearStopOrder(db: D1Database, tripSlug: string): Promise<void> {
+  await db.prepare('UPDATE stops SET position = NULL WHERE trip_slug = ?').bind(tripSlug).run();
+}
+
 /** L'hash del token di scrittura del viaggio a cui appartiene questa tappa. */
 export async function getWriteTokenHashByStop(db: D1Database, stopSlug: string): Promise<string | null> {
   const row = await db
@@ -171,12 +239,12 @@ export async function listTrips(db: D1Database): Promise<TripSummaryDto[]> {
 
   const { results: stops } = await db
     .prepare(
-      `SELECT s.slug, s.trip_slug, s.name,
+      `SELECT s.slug, s.trip_slug, s.name, ${DATA_TAPPA},
               (SELECT COUNT(*) FROM photos p WHERE p.stop_slug = s.slug) AS photo_count,
               (SELECT p.thumb_key FROM photos p WHERE p.stop_slug = s.slug
                 ORDER BY p.sort_index ASC LIMIT 1) AS cover
          FROM stops s
-        ORDER BY s.created_at ASC`,
+        ORDER BY ${ORDINE_TAPPE}`,
     )
     .all<{ slug: string; trip_slug: string; name: string; photo_count: number; cover: string | null }>();
 
@@ -189,27 +257,41 @@ export async function listTrips(db: D1Database): Promise<TripSummaryDto[]> {
    */
   const { results: covers } = await db
     .prepare(
-      `SELECT s.trip_slug AS trip_slug, p.thumb_key AS thumb_key, MIN(p.sort_index) AS piu_vecchia
+      `SELECT s.trip_slug AS trip_slug, p.thumb_key AS thumb_key, p.r2_key AS r2_key,
+              MIN(p.sort_index) AS piu_vecchia
          FROM photos p
          JOIN stops s ON s.slug = p.stop_slug
         GROUP BY s.trip_slug`,
     )
-    .all<{ trip_slug: string; thumb_key: string }>();
+    .all<{ trip_slug: string; thumb_key: string; r2_key: string }>();
 
-  const perTrip = new Map(covers.map((c) => [c.trip_slug, c.thumb_key]));
+  const perTrip = new Map(covers.map((c) => [c.trip_slug, c]));
 
   // La copertina scelta a mano, quando c'è, batte quella automatica.
   const { results: scelte } = await db
-    .prepare('SELECT id, thumb_key FROM photos WHERE id IN (SELECT cover_photo_id FROM trips WHERE cover_photo_id IS NOT NULL)')
-    .all<{ id: string; thumb_key: string }>();
-  const perId = new Map(scelte.map((r) => [r.id, r.thumb_key]));
+    .prepare(
+      `SELECT id, thumb_key, r2_key FROM photos
+        WHERE id IN (SELECT cover_photo_id FROM trips WHERE cover_photo_id IS NOT NULL)`,
+    )
+    .all<{ id: string; thumb_key: string; r2_key: string }>();
+  const perId = new Map(scelte.map((r) => [r.id, r]));
+
+  /*
+   * Di ogni copertina escono due riferimenti, non uno.
+   *
+   * La miniatura è da 300px: perfetta per i cerchietti delle tappe, e visibilmente
+   * sgranata sulla scheda grande, che su un telefono moderno occupa oltre mille pixel
+   * veri. Chi disegna sceglie quale dei due gli serve.
+   */
+  const copertina = (trip: { slug: string; cover_photo_id: string | null }) =>
+    (trip.cover_photo_id ? perId.get(trip.cover_photo_id) : null) ?? perTrip.get(trip.slug) ?? null;
 
   return trips.map((trip) => ({
     slug: trip.slug,
     name: trip.name,
     createdAt: trip.created_at,
-    coverThumbKey:
-      (trip.cover_photo_id ? perId.get(trip.cover_photo_id) : null) ?? perTrip.get(trip.slug) ?? null,
+    coverThumbKey: copertina(trip)?.thumb_key ?? null,
+    coverKey: copertina(trip)?.r2_key ?? null,
     stops: stops
       .filter((s) => s.trip_slug === trip.slug)
       .map((s) => ({

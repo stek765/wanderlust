@@ -12,8 +12,15 @@ import { recallMasterToken } from '../lib/session';
 import { buildMenuPanel } from './menu-panel';
 
 export class Menu {
-  /** Aggancia il menu, se questo browser ha di che riempirlo. */
-  static mount(root: HTMLElement): void {
+  /**
+   * Aggancia il menu, se questo browser ha di che riempirlo.
+   *
+   * `primaDiAprire` serve a chi ha qualcosa da togliere di mezzo: aprendo il cassetto dei
+   * viaggi con le foto di una tappa ancora aperte, quelle restavano lì sotto — si chiudeva
+   * il menu e ci si ritrovava dentro una tappa che si credeva di aver lasciato. Il menu
+   * non sa cosa c'è aperto sulla pagina, e non deve saperlo: lo chiede a chi lo monta.
+   */
+  static mount(root: HTMLElement, primaDiAprire?: () => void): void {
     const masterToken = recallMasterToken(localStorage);
     if (!masterToken) return;
 
@@ -49,6 +56,10 @@ export class Menu {
     const apri = () => {
       chiuso = false;
       scrim.hidden = false;
+      // Chi ha aperto qualcosa sopra la mappa se lo tolga di mezzo prima: due pannelli a
+      // schermo intero sovrapposti sono un modo sicuro di perdere l'orientamento.
+      primaDiAprire?.();
+
       drawer.hidden = false;
       // Un fotogramma di ritardo: senza, il browser applica lo stato finale insieme a
       // quello iniziale e l'animazione non parte proprio.

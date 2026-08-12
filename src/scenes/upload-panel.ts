@@ -33,10 +33,12 @@ export interface UploadPanelOptions {
   /**
    * Una foto è arrivata: è già registrata e ha il suo posto nella cronologia.
    *
-   * Arriva anche la miniatura in chiaro, perché chi riceve la notizia possa mostrarla
-   * senza riscaricare da R2 una cosa che è appena partita da qui.
+   * Arrivano in chiaro **entrambe** le versioni, perché chi riceve la notizia possa
+   * mostrarle senza riscaricare da R2 qualcosa che è appena partito da qui. Entrambe e non
+   * solo la miniatura: il mosaico disegna la versione grande, e adottare solo la piccola
+   * significherebbe rimandare a prenderne una che abbiamo già.
    */
-  onPhotoAdded: (photo: PhotoDto, thumb: Blob) => void;
+  onPhotoAdded: (photo: PhotoDto, versioni: { thumb: Blob; full: Blob }) => void;
 }
 
 export class UploadPanel {
@@ -211,7 +213,7 @@ export class UploadPanel {
         takenAt: processed.takenAt,
         sortIndex: registered.sortIndex,
       },
-      processed.thumb,
+      { thumb: processed.thumb, full: processed.full },
     );
   }
 

@@ -50,9 +50,16 @@ type MapLibre = Awaited<ReturnType<typeof caricaMapLibre>>;
  */
 const VOLO_OLTRE_KM = 60;
 
-/** Quanto dura lo spostamento. Corto per le tappe vicine, un po' più lungo per i voli. */
-const DURATA_VICINO_MS = 520;
-const DURATA_LONTANO_MS = 900;
+/**
+ * Quanto dura lo spostamento della camera.
+ *
+ * Erano 520 e 900, e la mappa scattava da una tappa all'altra: mentre il dito scorre
+ * ancora, lei era già arrivata. Il carosello si muove con la mano, la mappa deve
+ * accompagnarlo — non precederlo. Quasi il doppio, e il movimento diventa una cosa da
+ * guardare invece di uno spostamento da subire.
+ */
+const DURATA_VICINO_MS = 900;
+const DURATA_LONTANO_MS = 1600;
 
 /**
  * Lo stile della mappa. Tutti gratuiti e senza chiave API.
@@ -146,6 +153,17 @@ const VERDE = '#c0c6cb';
 const CITTA = '#bfc5cb';
 const EDIFICI = '#adb4bb';
 const STRADE = '#9aa2aa';
+/**
+ * Il colore della rotta: bianco, che non è un colore.
+ *
+ * Prima era un azzurro medio ed era l'unica cosa colorata sulla mappa insieme al pin — su
+ * una pagina la cui regola è "comandano le foto", una riga colorata che attraversa lo
+ * schermo ruba esattamente l'attenzione che dovrebbero avere loro. Poi è stata grigio
+ * d'ardesia, e si leggeva, ma spariva dentro le strade della mappa, che sono grigie anche
+ * loro. Il bianco su un'ombra scura è l'unica combinazione che resta riconoscibile sia
+ * sulla terra chiara sia sul mare quasi nero.
+ */
+const ROTTA = '#ffffff';
 const TESTO = 'rgba(30, 36, 43, 0.88)';
 const ALONE_TESTO = 'rgba(201, 206, 211, 0.9)';
 
@@ -378,11 +396,17 @@ export class MapScene {
   }
 
   /**
-   * La rotta tratteggiata, disegnata prima del volo.
+   * La rotta che collega le tappe.
    *
-   * Due strati e non uno: il tratteggio sottile da solo, su una mappa quasi nera, si
-   * legge come un graffio sullo schermo. L'alone largo sotto gli dà spessore e lo fa
-   * sembrare un percorso.
+   * **Non è più azzurra e non è più tratteggiata.** L'azzurro era un colore in più su una
+   * pagina che ne ha già uno solo, e su una mappa in scala di grigi tirava l'occhio più
+   * delle foto; il tratteggio la faceva sembrare un'indicazione stradale invece di una
+   * traccia. Ora è una linea continua e sottile in grigio d'ardesia — un tratto di matita
+   * sulla mappa, non un percorso da seguire.
+   *
+   * Due strati restano necessari, e per una ragione che si vede solo provando: la terra è
+   * chiara e il mare è quasi nero, quindi **nessun colore singolo si legge su entrambi**.
+   * La linea scura sopra tiene sulla terra, l'alone chiaro sotto la stacca dal mare.
    */
   private drawRoute(): void {
     if (this.options.stops.length < 2) return;
@@ -398,9 +422,12 @@ export class MapScene {
         type: 'line',
         source: ROUTE_SOURCE,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        // Alone chiaro: sul mare nero stacca la rotta dal fondo, sulla terra chiara
-        // sparisce senza fare danni.
-        paint: { 'line-color': '#ffffff', 'line-opacity': 0.28, 'line-width': 6 },
+        /*
+         * L'alone è SCURO e la linea sopra è bianca: i due strati sono invertiti rispetto
+         * a prima, ed è quello che permette a una rotta bianca di esistere su una mappa
+         * che ha la terra chiara. Senza l'ombra sotto, sulla costa la linea sparirebbe.
+         */
+        paint: { 'line-color': '#0a0e12', 'line-opacity': 0.45, 'line-width': 5, 'line-blur': 1.5 },
       });
 
       this.map.addLayer({
@@ -409,12 +436,12 @@ export class MapScene {
         source: ROUTE_SOURCE,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          // Un azzurro medio e non chiaro: quello chiaro spariva appena la rotta
-          // attraversava la terra.
-          'line-color': '#0f7ea3',
-          'line-opacity': 0.95,
-          'line-width': 2,
-          'line-dasharray': [2, 2.2],
+          // Bianca, appoggiata sulla propria ombra: risalta su tutto senza essere un
+          // colore. Il grigio d'ardesia di prima si leggeva, ma spariva dentro le strade
+          // della mappa, che sono grigie anche loro.
+          'line-color': ROTTA,
+          'line-opacity': 0.92,
+          'line-width': 1.8,
         },
       });
     } catch {

@@ -169,6 +169,37 @@ test('se la ricerca non trova il luogo, le coordinate si scrivono a mano', async
   await expect(riga.locator('.stopchip').filter({ hasText: 'la spiaggia dei nonni' })).toBeVisible();
 });
 
+/*
+ * Il giro che rende utile l'esportazione.
+ *
+ * Il portachiavi vive nel localStorage di un browser solo: un viaggio creato dal telefono,
+ * sul computer compare nell'elenco ma con le copertine grigie, perché la sua chiave è
+ * rimasta di là. Per un po' l'esportazione è esistita senza il suo inverso, e il file
+ * prodotto non si poteva ricaricare da nessuna parte.
+ */
+test('le chiavi si portano da un dispositivo all\'altro', async ({ page }) => {
+  await creaViaggio(page, 'Thailandia', ['Bangkok']);
+
+  const scaricato = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Esporta' }).click();
+  const file = await (await scaricato).path();
+
+  // Da qui in poi questo browser è un browser qualsiasi: ha il token master, non le chiavi.
+  await page.evaluate(() => localStorage.removeItem('ricordi:keychain'));
+  await page.reload();
+
+  const riga = page.locator('.trip').first();
+  await expect(riga.locator('.trip__missing')).toContainText('Importa');
+  await expect(riga.getByRole('button', { name: '+ Tappa' })).toHaveCount(0);
+
+  await page.locator('.panel input[type="file"]').setInputFiles(file);
+  await expect(page.locator('.panel__import-esito')).toContainText('1 chiave aggiunta');
+
+  // Tornata la chiave, il viaggio è di nuovo governabile da qui.
+  await expect(riga.getByRole('button', { name: '+ Tappa' })).toBeVisible();
+  await expect(riga.locator('.trip__missing')).toHaveCount(0);
+});
+
 test('la chiave di cifratura non arriva mai al server', async ({ page }) => {
   const richieste: string[] = [];
   page.on('request', (request) => richieste.push(request.url()));
