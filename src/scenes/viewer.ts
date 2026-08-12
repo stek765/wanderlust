@@ -228,14 +228,15 @@ export class Viewer {
     const bar = document.createElement('div');
     bar.className = 'viewer__bar';
 
-    // Simboli e non parole: dentro un disco da trentotto pixel "Chiudi" ed "Elimina"
-    // uscivano dal bordo. L'etichetta resta, ma per chi legge lo schermo a voce.
+    // Il solo simbolo che resta: una × sta in un disco, una parola no. "Elimina" invece
+    // resta scritto — un comando che distrugge deve dire cosa fa, e un cestino disegnato
+    // lo dice peggio di come lo dica la parola.
     const close = button('✕', 'viewer__close', () => this.close());
     close.setAttribute('aria-label', 'Chiudi');
     bar.append(close);
 
     if (this.actions.onDelete) {
-      const elimina = button('🗑', 'viewer__action viewer__action--danger', async () => {
+      const elimina = button('Elimina', 'viewer__action viewer__action--danger', async () => {
           const photo = this.photos[this.index];
           if (!photo) return;
           // Volutamente non si usa confirm(): su iOS un dialogo di sistema qui è
@@ -246,7 +247,7 @@ export class Viewer {
             target.textContent = 'Confermi?';
             setTimeout(() => {
               target.dataset.armed = 'no';
-              target.textContent = '🗑';
+              target.textContent = 'Elimina';
             }, 4000);
             return;
           }

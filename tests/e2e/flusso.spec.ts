@@ -293,43 +293,46 @@ test('le foto entrano nella griglia mentre le altre sono ancora in viaggio', asy
 });
 
 /*
- * Cancellare più foto insieme.
+ * Cancellare non deve far perdere il segno.
  *
- * Prima si poteva solo aprire una foto, cancellarla, e ritrovarsi la griglia riportata in
- * cima: con dieci foto voleva dire ritrovare il punto dieci volte.
+ * Togliere una foto ricostruisce la pagina, e ricostruirla la riportava in cima: con
+ * dieci foto da togliere significava ritrovare il punto dieci volte.
  */
-test('si possono scegliere più foto e cancellarle in un colpo', async ({ page }) => {
+test('cancellare una foto non riporta la galleria all\'inizio', async ({ page }) => {
   const tagUrl = await creaViaggio(page, 'Thailandia', ['Bangkok']);
   await page.goto(percorso(tagUrl));
   await apriTappa(page, 0);
 
   await page.locator('.shelf input[type="file"]').setInputFiles(
-    Array.from({ length: 3 }, (_, i) => ({
+    Array.from({ length: 8 }, (_, i) => ({
       name: `ricordo-${i}.png`,
       mimeType: 'image/png',
       buffer: PNG_4x4,
     })),
   );
-  await expect(page.locator('.shelf .tile')).toHaveCount(3, { timeout: 60_000 });
+  await expect(page.locator('.shelf .tile')).toHaveCount(8, { timeout: 60_000 });
 
-  await page.getByRole('button', { name: 'Seleziona' }).click();
+  const pagina = page.locator('.shelf .page').nth(1);
+  await pagina.evaluate((el) => el.scrollTo({ top: 200 }));
+  const prima = await pagina.evaluate((el) => el.scrollTop);
+  expect(prima).toBeGreaterThan(0);
 
-  // In selezione un tocco sceglie invece di aprire: il visore non deve comparire.
-  await page.locator('.shelf .tile').nth(0).click();
-  await page.locator('.shelf .tile').nth(1).click();
-  await expect(page.locator('.viewer')).toBeHidden();
-  await expect(page.locator('.scelta__conteggio')).toHaveText('2 selezionate');
-
-  // Il selettore è quello della barra di selezione e non il ruolo: anche il visore ha un
-  // pulsante che si chiama "Elimina", e per nome si finisce a cliccare quello.
-  const elimina = page.locator('.scelta__elimina');
+  /*
+   * Si apre l'ULTIMA foto, non la prima.
+   *
+   * Playwright porta in vista l'elemento che sta per cliccare: con la prima, che sta in
+   * cima, riporterebbe la pagina su da sola — e il test misurerebbe il proprio effetto
+   * collaterale invece del comportamento del sito. Ci è cascato, e per due volte ha fatto
+   * sospettare un difetto che non c'era.
+   */
+  await page.locator('.shelf .tile').last().click();
+  const elimina = page.locator('.viewer__action--danger');
   await elimina.click();
-  await expect(elimina).toHaveText(/Confermi\? \(2\)/);
   await elimina.click();
 
-  await expect(page.locator('.shelf .tile')).toHaveCount(1, { timeout: 30_000 });
-  // Finita la selezione si torna a guardare: la barra sparisce da sola.
-  await expect(page.locator('.scelta')).toBeHidden();
+  await expect(page.locator('.shelf .tile')).toHaveCount(7, { timeout: 30_000 });
+  // Lo scorrimento è rimasto dov'era, non è tornato a zero.
+  expect(await pagina.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
 });
 
 test('scorrere il carosello cambia la tappa corrente, senza toccare niente', async ({ page }) => {

@@ -817,35 +817,43 @@ button:active {
 .viewer__action {
   display: grid;
   place-items: center;
-  width: 38px;
   height: 38px;
-  padding: 0;
   border: 0;
-  border-radius: 50%;
   background: rgb(20 24 30 / 55%);
   color: #fff;
-  font-size: 17px;
   line-height: 1;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 2px 10px rgb(0 0 0 / 35%);
 }
 
-/* Il cestino sta all'angolo opposto: due comandi vicini, di cui uno distrugge, è un invito
-   a sbagliare con il pollice. */
-.viewer__action {
-  margin-left: auto;
+/* La × sta in un disco: è un simbolo, e un simbolo in un cerchio si legge da solo. */
+.viewer__close {
+  width: 38px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 17px;
 }
 
-/* Rosso solo dopo il primo tocco, quando il pulsante chiede conferma: prima era acceso
-   sempre, e un comando distruttivo che urla a riposo è solo rumore. */
-.viewer__action--danger[data-armed='si'] {
-  width: auto;
-  padding: 0 14px;
+/*
+ * "Elimina" resta una parola, in una pillola all'angolo opposto.
+ *
+ * Un cestino disegnato dice la stessa cosa peggio, e due comandi vicini di cui uno
+ * distrugge sono un invito a sbagliare col pollice. Il rosso c'è da subito perché qui la
+ * parola è già l'avvertimento — ma acceso piano: urla solo quando chiede conferma.
+ */
+.viewer__action {
+  margin-left: auto;
+  padding: 0 15px;
   border-radius: 999px;
-  background: rgb(255 107 107 / 22%);
-  color: var(--pericolo);
-  font-size: 13px;
+  color: rgb(255 107 107 / 82%);
+  font-size: 13.5px;
+  font-weight: 550;
+}
+
+.viewer__action--danger[data-armed='si'] {
+  background: rgb(255 107 107 / 26%);
+  color: #fff;
 }
 
 /*

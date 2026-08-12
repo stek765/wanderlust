@@ -28,8 +28,7 @@ export interface GalleryOptions {
   container: HTMLElement;
   photos: PhotoDto[];
   store: PhotoStore;
-  /** Il riquadro toccato. Arriva anche l'elemento, perché in selezione va segnato. */
-  onOpen: (index: number, tile: HTMLElement) => void;
+  onOpen: (index: number) => void;
 }
 
 /** L'unità di riga del mosaico, in pixel. Piccola: più è fine, meglio si incastrano. */
@@ -58,8 +57,18 @@ export class Gallery {
     this.grid = document.createElement('div');
     this.grid.className = 'grid';
 
-    this.render();
+    /*
+     * Prima nel documento, poi disegnata. L'ordine inverso era un difetto vero.
+     *
+     * `layout()` misura la larghezza per sapere quante righe occupa ogni riquadro, e su un
+     * elemento non ancora inserito quella larghezza è zero: il calcolo usciva subito e le
+     * altezze restavano tutte a una riga. Arrivavano solo più tardi, dall'osservatore di
+     * ridimensionamento, e nel frattempo la pagina era alta quasi niente — abbastanza da
+     * far perdere il punto in cui si stava guardando a chi cancellava una foto, perché il
+     * browser schiaccia a zero uno scorrimento più lungo del contenuto.
+     */
     this.options.container.append(this.grid);
+    this.render();
 
     // Ruotando il telefono cambia tutto: larghezza, numero di colonne e quindi l'altezza
     // di ogni riquadro. Senza, il mosaico resterebbe disegnato per l'orientamento di prima.
@@ -73,7 +82,7 @@ export class Gallery {
       tile.className = 'tile';
       tile.type = 'button';
       tile.setAttribute('aria-label', `Foto ${index + 1} di ${this.options.photos.length}`);
-      tile.addEventListener('click', () => this.options.onOpen(index, tile));
+      tile.addEventListener('click', () => this.options.onOpen(index));
 
       this.tiles.set(tile, photo);
       this.observer.observe(tile);
@@ -91,7 +100,12 @@ export class Gallery {
    */
   private layout(): void {
     const larghezza = this.grid.clientWidth;
-    if (larghezza === 0) return;
+    // Larghezza zero significa che non siamo ancora visibili: si riprova al fotogramma
+    // dopo invece di lasciare i riquadri alti una riga in attesa dell'osservatore.
+    if (larghezza === 0) {
+      requestAnimationFrame(() => this.layout());
+      return;
+    }
 
     const colonneOra = colonne(larghezza);
     this.grid.style.gridTemplateColumns = `repeat(${colonneOra}, 1fr)`;
