@@ -1,7 +1,8 @@
 # Ricordi NFC
 
-Tocchi un magnete sul frigo, si apre un globo che vola sul posto dove sei stato, e da lì
-si aprono le foto. Poi scorri, e la mappa vola alla tappa successiva lungo la rotta.
+Tocchi un magnete sul frigo e si apre la mappa, già ferma sul posto dove sei stato, con
+le foto a un tocco di distanza. Poi scorri, e la mappa vola alla tappa successiva lungo
+la rotta.
 
 Un magnete = una tappa, ma aprirlo mostra **tutto il viaggio** a cui appartiene,
 posizionato lì.
@@ -9,6 +10,20 @@ posizionato lì.
 Le foto sono cifrate nel browser prima di partire: su Cloudflare arrivano byte illeggibili.
 La chiave sta nell'URL dopo il `#`, che i browser non inviano mai al server, ed è **una per
 viaggio** — è quello che permette di scorrere da una tappa all'altra decifrando tutto.
+
+<p align="center">
+  <img src="docs/demo.webp" alt="Un viaggio sfogliato: la mappa vola da una tappa all'altra, poi si aprono le foto" width="300">
+</p>
+
+Il viaggio qui sopra è inventato — cinque tappe fra Tokyo e Hiroshima — e lo ricostruisce
+da capo `tools/demo.mjs` ogni volta che serve, così la dimostrazione segue l'interfaccia
+invece di restare la fotografia di una versione vecchia. Le foto sono vere, scaricate da
+[Openverse](https://openverse.org) **solo con licenza CC0 o pubblico dominio**.
+
+È un **WebP animato** e non una GIF: a colori pieni sta in 4,3 MB alla larghezza vera del
+telefono ripreso, mentre per stare sotto i 5 MB una GIF doveva scendere a 240 pixel, 12
+fotogrammi al secondo e 144 colori sparpagliati a scacchiera. GitHub lo anima come farebbe
+con una GIF.
 
 Design: [`docs/superpowers/specs/2026-08-10-viaggi-design.md`](docs/superpowers/specs/2026-08-10-viaggi-design.md)
 (il precedente, ancora utile per l'impianto generale, è `2026-08-06-ricordi-nfc-design.md`)
@@ -35,17 +50,14 @@ MASTER_TOKEN_HASH=fb911d9fa5ff4100174f088ba0e2ad0ee6b579e7ec895af9df113dfdce662b
 si ricorda il token e il menu ☰ compare in cima a ogni pagina.
 
 ```bash
-npm test                  # 118 test: librerie + Worker su workerd vero
-npm run test:e2e          # 17 test end-to-end (server dedicato sulla porta 8788)
+npm test                  # 132 test: librerie + Worker su workerd vero
+npm run test:e2e          # 22 test end-to-end (server dedicato sulla porta 8788)
 npm run typecheck         # browser e Worker hanno tsconfig separati
 node tools/screenshots.mjs   # dodici schermate del sito, in tools/screenshots/
 node tools/misura.mjs        # quanto ci mette ad aprirsi, con la rete rallentata
+node tools/demo.mjs          # l'animazione qui in cima, ricostruita da zero
+node tools/foto-vere.mjs     # solo le foto del viaggio finto, per guardarle
 ```
-
-⚠️ **I 17 test end-to-end sono attualmente tutti rossi, e non per un guasto del sito.**
-Falliscono nella funzione condivisa che crea un viaggio: riempie i campi latitudine e
-longitudine, che da quando la tappa si aggiunge cercando il luogo restano nascosti finché
-la ricerca non fallisce. È il test rimasto indietro rispetto al modulo, e va riallineato.
 
 `screenshots.mjs` apre il sito con foto finte in tre proporzioni e fotografa ogni
 schermata, su telefono e su desktop. Serve perché i difetti visivi non si vedono leggendo
@@ -54,6 +66,20 @@ il CSS. Cancella e ricrea i viaggi del database **delle prove**.
 `misura.mjs` misura due tempi sulla prima apertura — il primo pixel e il momento in cui la
 pagina diventa usabile — con la rete a 4G scarso e il processore rallentato quattro volte.
 Serve per non discutere di prestazioni a sensazione.
+
+`demo.mjs` costruisce il viaggio finto descritto in `viaggio-demo.mjs`, ci carica dentro
+le foto scaricate da `foto-vere.mjs`, e poi lo riprende mentre lo si sfoglia: ne esce
+`docs/demo.webp`. Riprende una scheda **senza token di scrittura**, cioè quello che vede
+chi riceve il link — niente ☰, niente pulsante per caricare. Come `screenshots.mjs`,
+comincia cancellando i viaggi del database **delle prove**. Vuole `ffmpeg` e `img2webp`
+(`brew install ffmpeg webp`): questo ffmpeg è compilato senza libwebp e da solo il WebP
+non lo scrive.
+
+`foto-vere.mjs` scarica sei foto per tappa da Openverse, **solo CC0 e pubblico dominio**,
+le riduce a 1600 pixel e ci riscrive dentro la data di scatto del viaggio inventato —
+serve, perché è la data della foto più vecchia a decidere l'ordine delle tappe. Scarta da
+sé le stampe d'epoca, il bianco e nero d'archivio e i doppioni, e lascia i crediti in
+`tools/foto-vere/CREDITI.md`. Le immagini non stanno nel repo: si riscaricano.
 
 ## Cosa serve fare a te, una volta sola
 
@@ -154,18 +180,30 @@ src/scenes/       map-scene (la mappa e i suoi spostamenti) · stop-deck (il car
 src/pages/        trip (la pagina del viaggio) · master (la porta d'ingresso)
 shared/           i tipi dell'API, importati da entrambi i lati
 tools/            screenshots.mjs (guardare il sito) · misura.mjs (cronometrarlo)
+                  demo.mjs (l'animazione del README) · viaggio-demo.mjs (il viaggio finto)
+                  foto-vere.mjs (le sue foto, da Openverse)
 ```
 
 Il database ha tre tabelle: `trips` → `stops` → `photos`. Chiave di cifratura e token di
 scrittura stanno sul viaggio.
 
-## Una nota sul volo di 3,8 secondi
+## Una nota sui voli della mappa
 
-Non è decorazione. Le foto sono cifrate: prima di comparire vanno scaricate e decifrate, e
-quel lavoro costa. Il volo d'arrivo dura esattamente quanto serve a farlo in sottofondo.
+**Il volo d'arrivo di 3,8 secondi non c'è più**: serviva a coprire la decifratura delle
+foto, ma sulla prima schermata le foto non ci sono più — bastano le miniature delle
+copertine — quindi copriva un'attesa che non esiste, cioè era un'attesa in più. Si arriva
+e la mappa è già sulla prima tappa.
 
-Togliere l'animazione non renderebbe la pagina più veloce: farebbe comparire uno spinner
-al posto di un globo che scende su Bangkok.
+Restano i voli **fra** una tappa e l'altra: mezzo secondo scarso sotto i 60 km, 1,6
+secondi sopra, dove la camera si allarga a metà strada. Accompagnano lo scorrimento, non
+lo coprono.
 
-I voli fra una tappa e l'altra sono un'altra cosa: 1,2 secondi, perché lì non c'è niente da
-nascondere — accompagnano lo scorrimento, non lo coprono.
+⚠️ **Su tratte da migliaia di chilometri la mappa resta grigia per tutto il volo.** La
+camera sale sopra la scala continentale, e a quelle quote le mattonelle non fanno in tempo
+a comparire: vengono chieste (misurate: 6 a zoom 1, 22 a zoom 2) e con la cache calda
+arrivano anche subito, ma fra l'arrivo e il disegno passa più tempo di quanto la camera
+resti lassù. Ferma alla stessa quota, la mappa si disegna in pieno. Vale anche per il
+globo, che sotto lo zoom 2 entra nell'inquadratura come una palla grigia senza continenti.
+L'unica cosa che lo cambierebbe è allungare il volo, che è una decisione di progetto, non
+una correzione — ed è il motivo per cui il viaggio della dimostrazione ha tappe vicine.
+Si vede nell'animazione in cima.

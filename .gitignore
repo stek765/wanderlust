@@ -8,3 +8,7 @@ playwright-report/
 
 # Contiene le credenziali del progetto: sta sul disco, non nel repo.
 CLAUDE.md
+
+# Generati da tools/demo.mjs: le foto si riscaricano, il video è di lavorazione.
+tools/foto-vere/
+tools/demo/
