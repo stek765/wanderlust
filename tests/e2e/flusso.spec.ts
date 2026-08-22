@@ -427,6 +427,38 @@ test('il visore resta chiuso finché non si tocca una foto', async ({ page }) =>
   await expect(page.locator('.viewer')).toBeHidden();
 });
 
+/*
+ * La didascalia del foglio galleggia sopra il mosaico senza occupare spazio nel flusso, ed
+ * è una scelta voluta. Ma finché era un bersaglio pieno si prendeva i tocchi delle foto
+ * che le stavano sotto: misurato su cinque tappe, copriva il 52-65% dei riquadri della
+ * prima riga, e in nove su dieci il centro della foto non era toccabile. Il difetto
+ * spariva appena si scorreva — cioè restava solo nel momento in cui uno apre una tappa e
+ * tocca la prima foto.
+ */
+test('la didascalia non ruba i tocchi alle foto che le stanno sotto', async ({ page }) => {
+  const tagUrl = await creaViaggio(page, 'Thailandia', ['Bangkok']);
+  await page.goto(percorso(tagUrl));
+  await caricaUnaFoto(page, 0);
+
+  const arrivaAlRiquadro = await page.evaluate(() => {
+    const riquadro = document.querySelector('.shelf .tile');
+    if (!riquadro) return null;
+    const r = riquadro.getBoundingClientRect();
+    // Al 30% della larghezza per stare lontani dalla maniglia, che sta al centro ed è
+    // l'unica cosa della didascalia che i tocchi deve prenderseli davvero.
+    const x = r.left + r.width * 0.3;
+    return [r.top + 10, r.top + r.height / 2].map(
+      (y) => document.elementFromPoint(x, y)?.closest('.tile') === riquadro,
+    );
+  });
+
+  expect(arrivaAlRiquadro).toEqual([true, true]);
+
+  // E la prova che conta: la prima foto si apre toccandola.
+  await page.locator('.shelf .tile').first().click();
+  await expect(page.locator('.viewer')).toBeVisible();
+});
+
 test('la galleria si chiude e torna alla mappa', async ({ page }) => {
   // Regressione della stessa famiglia: un sovrapposto a schermo intero che dichiara
   // `overflow` e `animation` batte l'attributo `hidden`, e resta lì a coprire la mappa.

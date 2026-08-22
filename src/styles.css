@@ -572,6 +572,30 @@ button:active {
   /* Il browser non deve usare i gesti verticali che partono da qui per scorrere: sono
      nostri, e servono a chiudere il foglio. */
   touch-action: none;
+  /*
+   * ⚠️ La didascalia NON deve prendersi i tocchi delle foto che le stanno sotto.
+   *
+   * Stando sopra il mosaico senza occupare spazio nel flusso — che è la scelta spiegata
+   * qui sopra e resta giusta — questa barra copriva **il 52-65% dei riquadri della prima
+   * riga**, e siccome era un bersaglio pieno se li mangiava. Misurato su cinque tappe: in
+   * nove riquadri su dieci `elementFromPoint` al centro della foto restituiva la barra.
+   * Cioè le prime due foto si aprivano solo mirando al loro bordo inferiore.
+   *
+   * Il difetto spariva da solo appena si scorreva, perché `.shelf--scorso` spegne la
+   * barra — quindi si vedeva solo nel momento in cui uno apre una tappa e tocca la prima
+   * foto, che è esattamente il momento peggiore.
+   *
+   * Qui la barra diventa trasparente ai tocchi e li riaccendono solo le due cose che
+   * servono davvero: il pulsante di chiusura e la maniglia. Il gesto per chiudere
+   * trascinando non si perde — parte comunque da `attachSheetDrag`, che ascolta su tutto
+   * il foglio, e la maniglia resta il punto da cui trascinare col mouse.
+   */
+  pointer-events: none;
+}
+
+.shelf__back,
+.shelf__grip {
+  pointer-events: auto;
 }
 
 /* Scorrendo le foto l'informazione si toglie di mezzo: ha già detto quello che doveva. */
